@@ -17,12 +17,13 @@ pair_set = colorsets["PAIR"]
 # Create the CPN structure
 p_int = Place("P_Int", int_set)      # timed place
 p_pair = Place("P_Pair", pair_set)   # timed place
-t = Transition("T", guard="x > 10", variables=["x"])
+# Added transition_delay=2 as an example
+t = Transition("T", guard="x > 10", variables=["x"], transition_delay=2)
 
 cpn = CPN()
 cpn.add_place(p_int)
 cpn.add_place(p_pair)
-# Arc with time delay on output: produced tokens get timestamp = global_clock + 5
+# Arc with time delay on output: produced tokens get timestamp = global_clock + transition_delay + arc_delay
 cpn.add_transition(t)
 cpn.add_arc(Arc(p_int, t, "x"))
 cpn.add_arc(Arc(t, p_pair, "(x, 'hello') @+5"))
@@ -50,8 +51,7 @@ print("Is T enabled without explicit binding?", cpn.is_enabled(t, marking, conte
 cpn.fire_transition(t, marking, context)
 print(marking)
 
-# The global clock is still 0 because we didn't advance it.
-# The produced token has timestamp = 0 + 5 = 5.
-# If we now advance the global clock:
+# The global clock is still 0.
+# The produced token has timestamp = global_clock + transition_delay (2) + arc_delay (5) = 7.
 cpn.advance_global_clock(marking)
 print("After advancing global clock:", marking.global_clock)
