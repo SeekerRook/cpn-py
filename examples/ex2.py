@@ -1,4 +1,4 @@
-from cpn.cpn import *
+from cpn.cpn_imp import *
 
 
 # Example with timed color sets

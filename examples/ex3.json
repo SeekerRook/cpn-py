@@ -1,0 +1,47 @@
+{
+  "colorSets": [
+    "colset INT = int timed;",
+    "colset STRING = string;",
+    "colset PAIR = product(INT, STRING) timed;"
+  ],
+  "places": [
+    {
+      "name": "P_Int",
+      "colorSet": "INT"
+    },
+    {
+      "name": "P_Pair",
+      "colorSet": "PAIR"
+    }
+  ],
+  "transitions": [
+    {
+      "name": "T",
+      "guard": "x > 10",
+      "variables": ["x"],
+      "transitionDelay": 2,
+      "inArcs": [
+        {
+          "place": "P_Int",
+          "expression": "x"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "P_Pair",
+          "expression": "(x, 'hello') @+5"
+        }
+      ]
+    }
+  ],
+  "initialMarking": {
+    "P_Int": {
+      "tokens": [5, 12],
+      "timestamps": [0, 0]
+    },
+    "P_Pair": {
+      "tokens": []
+    }
+  },
+  "evaluationContext": null
+}
