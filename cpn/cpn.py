@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional, Union
 # ColorSets
 # -----------------------------------------------------------------------------------
 class ColorSet(ABC):
-    """Abstract base class for representing a color set."""
     @abstractmethod
     def is_member(self, value: Any) -> bool:
         pass
@@ -19,8 +18,19 @@ class StringColorSet(ColorSet):
     def is_member(self, value: Any) -> bool:
         return isinstance(value, str)
 
+class ProductColorSet(ColorSet):
+    def __init__(self, cs1: ColorSet, cs2: ColorSet):
+        self.cs1 = cs1
+        self.cs2 = cs2
+
+    def is_member(self, value: Any) -> bool:
+        if not isinstance(value, tuple) or len(value) != 2:
+            return False
+        return self.cs1.is_member(value[0]) and self.cs2.is_member(value[1])
+
+
 # -----------------------------------------------------------------------------------
-# Token & Multiset
+# Token, Multiset, Marking
 # -----------------------------------------------------------------------------------
 class Token:
     def __init__(self, value: Any):
@@ -46,7 +56,6 @@ class Multiset:
             del self._counter[token_value]
 
     def __le__(self, other: 'Multiset') -> bool:
-        # Check if self is a sub-multiset of other
         for val, cnt in self._counter.items():
             if other._counter[val] < cnt:
                 return False
@@ -68,18 +77,11 @@ class Multiset:
     def __repr__(self):
         return f"Multiset({dict(self._counter)})"
 
-# -----------------------------------------------------------------------------------
-# Marking
-# -----------------------------------------------------------------------------------
 class Marking:
-    """
-    Holds the current distribution of tokens across places.
-    """
     def __init__(self):
         self._marking: Dict[str, Multiset] = {}
 
     def set_tokens(self, place_name: str, tokens: List[Any]):
-        # Tokens must already respect the colorset in a well-formed model
         self._marking[place_name] = Multiset([Token(v) for v in tokens])
 
     def add_tokens(self, place_name: str, token_values: List[Any]):
@@ -101,7 +103,89 @@ class Marking:
         return f"Marking({self._marking})"
 
 # -----------------------------------------------------------------------------------
-# Place, Transition, Arc
+# ColorSetParser
+# -----------------------------------------------------------------------------------
+class ColorSetParser:
+    """
+    A simple parser for a tiny DSL that defines color sets.
+    Grammar:
+      definition := "colset" NAME "=" type ";"
+      type := "int" | "string" | NAME | "product(" type "," type ")"
+
+    Where NAME is a previously defined color set (or one you're defining).
+    Example:
+      colset INT = int;
+      colset STRING = string;
+      colset PAIR = product(INT, STRING);
+    """
+
+    def __init__(self):
+        self.colorsets: Dict[str, ColorSet] = {}
+
+    def parse_definitions(self, text: str) -> Dict[str, ColorSet]:
+        lines = text.strip().splitlines()
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            self._parse_line(line)
+        return self.colorsets
+
+    def _parse_line(self, line: str):
+        if not line.endswith(";"):
+            raise ValueError("Color set definition must end with a semicolon.")
+        line = line[:-1].strip()  # remove trailing ";"
+        if not line.startswith("colset "):
+            raise ValueError("Color set definition must start with 'colset'.")
+        line = line[len("colset "):].strip()
+        parts = line.split("=", 1)
+        if len(parts) != 2:
+            raise ValueError("Invalid color set definition format.")
+        name = parts[0].strip()
+        type_str = parts[1].strip()
+
+        cs = self._parse_type(type_str)
+        self.colorsets[name] = cs
+
+    def _parse_type(self, type_str: str) -> ColorSet:
+        # Base cases
+        if type_str == "int":
+            return IntegerColorSet()
+        if type_str == "string":
+            return StringColorSet()
+
+        # If it's not a built-in, it might be a previously defined name:
+        if type_str.startswith("product(") and type_str.endswith(")"):
+            inner = type_str[len("product("):-1].strip()
+            comma_index = self._find_comma_at_top_level(inner)
+            if comma_index == -1:
+                raise ValueError("Invalid product definition: must have two types separated by a comma.")
+            type1_str = inner[:comma_index].strip()
+            type2_str = inner[comma_index+1:].strip()
+            cs1 = self._parse_type(type1_str)
+            cs2 = self._parse_type(type2_str)
+            return ProductColorSet(cs1, cs2)
+
+        # Otherwise, it might be a reference to an already defined color set name
+        if type_str in self.colorsets:
+            return self.colorsets[type_str]
+
+        raise ValueError(f"Unknown type definition or reference: {type_str}")
+
+    def _find_comma_at_top_level(self, s: str) -> int:
+        # A simple approach since our grammar is simple:
+        level = 0
+        for i, ch in enumerate(s):
+            if ch == '(':
+                level += 1
+            elif ch == ')':
+                level -= 1
+            elif ch == ',' and level == 0:
+                return i
+        return -1
+
+# -----------------------------------------------------------------------------------
+# Place, Transition, Arc, CPN
 # -----------------------------------------------------------------------------------
 class Place:
     def __init__(self, name: str, colorset: ColorSet):
@@ -112,13 +196,9 @@ class Place:
         return f"Place({self.name}, {self.colorset.__class__.__name__})"
 
 class Transition:
-    """
-    Guard is a Python expression string that returns True/False.
-    Variables used in the guard must be provided in the binding when checking enabling.
-    """
     def __init__(self, name: str, guard: Optional[str] = None, variables: Optional[List[str]] = None):
         self.name = name
-        self.guard_expr = guard  # Python expression string
+        self.guard_expr = guard
         self.variables = variables if variables else []
 
     def evaluate_guard(self, binding: Dict[str, Any]) -> bool:
@@ -130,10 +210,6 @@ class Transition:
         return f"Transition({self.name})"
 
 class Arc:
-    """
-    Arc inscriptions are Python expressions returning either a single value or a list of values.
-    They must use the variables that appear in the transitions.
-    """
     def __init__(self, source: Union[Place, Transition], target: Union[Place, Transition], expression: str):
         self.source = source
         self.target = target
@@ -141,7 +217,6 @@ class Arc:
 
     def evaluate(self, binding: Dict[str, Any]) -> List[Any]:
         val = eval(self.expression, {}, binding)
-        # Normalize to a list
         if isinstance(val, list):
             return val
         else:
@@ -150,9 +225,6 @@ class Arc:
     def __repr__(self):
         return f"Arc({self.source}, {self.target})"
 
-# -----------------------------------------------------------------------------------
-# CPN
-# -----------------------------------------------------------------------------------
 class CPN:
     def __init__(self):
         self.places: List[Place] = []
@@ -164,7 +236,6 @@ class CPN:
         self.places.append(place)
         if initial_tokens is None:
             initial_tokens = []
-        # Filter tokens that belong to colorset
         valid_tokens = [t for t in initial_tokens if place.colorset.is_member(t)]
         self.initial_marking.set_tokens(place.name, valid_tokens)
 
@@ -193,14 +264,10 @@ class CPN:
         return [a for a in self.arcs if a.source == t and isinstance(a.target, Place)]
 
     def is_enabled(self, t: Transition, binding: Dict[str, Any]) -> bool:
-        # Check guard
         if not t.evaluate_guard(binding):
             return False
-
-        # Check input arcs
         for arc in self.get_input_arcs(t):
             required_values = arc.evaluate(binding)
-            # Check if all required_values are in the place marking
             place_marking = self.initial_marking.get_multiset(arc.source.name)
             required_ms = Multiset([Token(v) for v in required_values])
             if not required_ms._counter <= place_marking._counter:
@@ -211,12 +278,10 @@ class CPN:
         if not self.is_enabled(t, binding):
             raise RuntimeError(f"Transition {t.name} is not enabled under the given binding.")
 
-        # Remove tokens from input places
         for arc in self.get_input_arcs(t):
             required_values = arc.evaluate(binding)
             self.initial_marking.remove_tokens(arc.source.name, required_values)
 
-        # Add tokens to output places
         for arc in self.get_output_arcs(t):
             produced_values = arc.evaluate(binding)
             self.initial_marking.add_tokens(arc.target.name, produced_values)
@@ -230,27 +295,43 @@ class CPN:
 # Example Usage
 # -----------------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Create a simple CPN:
-    # Place P with integer tokens
-    # Transition T with guard "x > 10"
-    # Arc from P to T: expression "x"
-    # Arc from T to P: expression "x + 1"
+    # Example definitions
+    # We define INT and STRING first, then PAIR uses them
+    cs_definitions = """
+    colset INT = int;
+    colset STRING = string;
+    colset PAIR = product(INT, STRING);
+    """
 
-    int_set = IntegerColorSet()
-    p = Place("P", int_set)
+    parser = ColorSetParser()
+    colorsets = parser.parse_definitions(cs_definitions)
+
+    # colorsets should now contain:
+    # {"INT": IntegerColorSet(), "STRING": StringColorSet(), "PAIR": ProductColorSet(IntegerColorSet(), StringColorSet())}
+
+    # Create a simple CPN using these color sets
+    int_set = colorsets["INT"]
+    pair_set = colorsets["PAIR"]
+
+    p_int = Place("P_Int", int_set)
+    p_pair = Place("P_Pair", pair_set)
     t = Transition("T", guard="x > 10", variables=["x"])
 
     cpn = CPN()
-    cpn.add_place(p, initial_tokens=[5, 12])  # P starts with tokens 5 and 12
+    cpn.add_place(p_int, initial_tokens=[5, 12])  # P_Int starts with tokens 5 and 12
+    cpn.add_place(p_pair)  # empty
     cpn.add_transition(t)
-    cpn.add_arc(Arc(p, t, "x"))         # input arc: takes a token equal to x
-    cpn.add_arc(Arc(t, p, "x + 1"))     # output arc: adds x+1 token to P
 
-    # Test enabling
+    # Arc from P_Int to T: "x"
+    cpn.add_arc(Arc(p_int, t, "x"))
+    # Arc from T to P_Pair: "(x, 'hello')"
+    cpn.add_arc(Arc(t, p_pair, "(x, 'hello')"))
+
+    # Check enabling:
     binding = {"x": 5}
-    print("Is T enabled with x=5?", cpn.is_enabled(t, binding))  # Guard: 5 > 10? False
+    print("Is T enabled with x=5?", cpn.is_enabled(t, binding))  # False, guard fails
 
     binding = {"x": 12}
-    print("Is T enabled with x=12?", cpn.is_enabled(t, binding)) # Guard: 12 > 10? True
+    print("Is T enabled with x=12?", cpn.is_enabled(t, binding)) # True, guard passes and token 12 is available
     cpn.fire_transition(t, binding)
     print("Marking after firing T with x=12:", cpn.initial_marking)
