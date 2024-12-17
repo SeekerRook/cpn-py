@@ -4,9 +4,12 @@ from typing import Any, Dict, List, Optional, Union
 
 
 # -----------------------------------------------------------------------------------
-# ColorSets
+# ColorSets with Timed Support
 # -----------------------------------------------------------------------------------
 class ColorSet(ABC):
+    def __init__(self, timed: bool = False):
+        self.timed = timed
+
     @abstractmethod
     def is_member(self, value: Any) -> bool:
         pass
@@ -17,7 +20,8 @@ class IntegerColorSet(ColorSet):
         return isinstance(value, int)
 
     def __repr__(self):
-        return "IntegerColorSet"
+        timed_str = " timed" if self.timed else ""
+        return f"IntegerColorSet{timed_str}"
 
 
 class StringColorSet(ColorSet):
@@ -25,11 +29,13 @@ class StringColorSet(ColorSet):
         return isinstance(value, str)
 
     def __repr__(self):
-        return "StringColorSet"
+        timed_str = " timed" if self.timed else ""
+        return f"StringColorSet{timed_str}"
 
 
 class ProductColorSet(ColorSet):
-    def __init__(self, cs1: ColorSet, cs2: ColorSet):
+    def __init__(self, cs1: ColorSet, cs2: ColorSet, timed: bool = False):
+        super().__init__(timed=timed)
         self.cs1 = cs1
         self.cs2 = cs2
 
@@ -39,17 +45,21 @@ class ProductColorSet(ColorSet):
         return self.cs1.is_member(value[0]) and self.cs2.is_member(value[1])
 
     def __repr__(self):
-        return f"ProductColorSet({repr(self.cs1)}, {repr(self.cs2)})"
+        timed_str = " timed" if self.timed else ""
+        return f"ProductColorSet({repr(self.cs1)}, {repr(self.cs2)}){timed_str}"
 
 
 # -----------------------------------------------------------------------------------
-# Token, Multiset, Marking
+# Token with Time
 # -----------------------------------------------------------------------------------
 class Token:
-    def __init__(self, value: Any):
+    def __init__(self, value: Any, timestamp: int = 0):
         self.value = value
+        self.timestamp = timestamp  # For timed tokens
 
     def __repr__(self):
+        if self.timestamp != 0:
+            return f"Token({self.value}, t={self.timestamp})"
         return f"Token({self.value})"
 
 
@@ -57,54 +67,75 @@ class Multiset:
     def __init__(self, tokens: Optional[List[Token]] = None):
         if tokens is None:
             tokens = []
-        self._counter = Counter([t.value for t in tokens])
+        # We'll store a list of tokens (with timestamps)
+        self.tokens = tokens
 
-    def add(self, token_value: Any, count: int = 1):
-        self._counter[token_value] += count
+    def add(self, token_value: Any, timestamp: int = 0, count: int = 1):
+        for _ in range(count):
+            self.tokens.append(Token(token_value, timestamp))
 
-    def remove(self, token_value: Any, count: int = 1):
-        if self._counter[token_value] < count:
+    def remove(self, token_value: Any, count: int = 1, timestamp: Optional[int] = None):
+        # Removing tokens can be tricky if timed. The occurrence rule states:
+        # For tokens of the same color, we should consume the one with the largest timestamp.
+        # We'll filter tokens with matching value and sort them by timestamp.
+        matching = [t for t in self.tokens if t.value == token_value]
+        if len(matching) < count:
             raise ValueError("Not enough tokens to remove.")
-        self._counter[token_value] -= count
-        if self._counter[token_value] <= 0:
-            del self._counter[token_value]
+        # Sort by timestamp descending, consume largest first.
+        matching.sort(key=lambda x: x.timestamp, reverse=True)
+        to_remove = matching[:count]
+        for tr in to_remove:
+            self.tokens.remove(tr)
+
+    def count_value(self, token_value: Any) -> int:
+        return sum(1 for t in self.tokens if t.value == token_value)
 
     def __le__(self, other: 'Multiset') -> bool:
-        for val, cnt in self._counter.items():
-            if other._counter[val] < cnt:
+        # Check if every token in self can be found in other with at least same multiplicity.
+        # Ignoring timestamps here would not be correct for a full timed semantics check.
+        # However, for enabling, we only check multiplicities and then ensure timestamps are okay.
+        # Let's just check raw counts per value for enabling.
+        self_counts = Counter(t.value for t in self.tokens)
+        other_counts = Counter(t.value for t in other.tokens)
+        for val, cnt in self_counts.items():
+            if other_counts[val] < cnt:
                 return False
         return True
 
     def __add__(self, other: 'Multiset') -> 'Multiset':
-        new_ms = Multiset()
-        new_ms._counter = self._counter + other._counter
-        return new_ms
+        return Multiset(self.tokens + other.tokens)
 
     def __sub__(self, other: 'Multiset') -> 'Multiset':
-        new_ms = Multiset()
-        for val in self._counter:
-            diff = self._counter[val] - other._counter[val]
-            if diff > 0:
-                new_ms._counter[val] = diff
-        return new_ms
+        # Not strictly needed in timed context, but kept for completeness.
+        # This doesn't consider timestamps precisely. A more accurate subtraction
+        # should remove specific tokens. We'll leave as-is for demonstration.
+        result = Multiset(self.tokens[:])
+        for t in other.tokens:
+            result.remove(t.value, 1)  # remove one matching token
+        return result
 
     def __repr__(self):
-        items_str = ", ".join([f"{val}*{cnt}" if cnt > 1 else str(val)
-                               for val, cnt in self._counter.items()])
+        items_str = ", ".join(str(t) for t in self.tokens)
         return f"{{{items_str}}}"
 
 
+# -----------------------------------------------------------------------------------
+# Marking with Global Clock
+# -----------------------------------------------------------------------------------
 class Marking:
     def __init__(self):
         self._marking: Dict[str, Multiset] = {}
+        self.global_clock = 0  # Time support
 
-    def set_tokens(self, place_name: str, tokens: List[Any]):
-        self._marking[place_name] = Multiset([Token(v) for v in tokens])
+    def set_tokens(self, place_name: str, tokens: List[Any], timestamps: Optional[List[int]] = None):
+        if timestamps is None:
+            timestamps = [0]*len(tokens)
+        self._marking[place_name] = Multiset([Token(v, ts) for v, ts in zip(tokens, timestamps)])
 
-    def add_tokens(self, place_name: str, token_values: List[Any]):
+    def add_tokens(self, place_name: str, token_values: List[Any], timestamp: int = 0):
         ms = self._marking.get(place_name, Multiset())
         for v in token_values:
-            ms.add(v)
+            ms.add(v, timestamp=timestamp)
         self._marking[place_name] = ms
 
     def remove_tokens(self, place_name: str, token_values: List[Any]):
@@ -117,7 +148,7 @@ class Marking:
         return self._marking.get(place_name, Multiset())
 
     def __repr__(self):
-        lines = ["Marking:"]
+        lines = [f"Marking (global_clock={self.global_clock}):"]
         for place, ms in self._marking.items():
             lines.append(f"  {place}: {ms}")
         if len(lines) == 1:
@@ -126,7 +157,7 @@ class Marking:
 
 
 # -----------------------------------------------------------------------------------
-# ColorSetParser
+# ColorSetParser with Timed Support
 # -----------------------------------------------------------------------------------
 class ColorSetParser:
     def __init__(self):
@@ -154,14 +185,20 @@ class ColorSetParser:
         name = parts[0].strip()
         type_str = parts[1].strip()
 
-        cs = self._parse_type(type_str)
+        # Check for "timed" keyword at the end
+        timed = False
+        if type_str.endswith("timed"):
+            timed = True
+            type_str = type_str[:-5].strip()
+
+        cs = self._parse_type(type_str, timed)
         self.colorsets[name] = cs
 
-    def _parse_type(self, type_str: str) -> ColorSet:
+    def _parse_type(self, type_str: str, timed: bool) -> ColorSet:
         if type_str == "int":
-            return IntegerColorSet()
+            return IntegerColorSet(timed=timed)
         if type_str == "string":
-            return StringColorSet()
+            return StringColorSet(timed=timed)
 
         if type_str.startswith("product(") and type_str.endswith(")"):
             inner = type_str[len("product("):-1].strip()
@@ -170,12 +207,23 @@ class ColorSetParser:
                 raise ValueError("Invalid product definition: must have two types separated by a comma.")
             type1_str = inner[:comma_index].strip()
             type2_str = inner[comma_index + 1:].strip()
-            cs1 = self._parse_type(type1_str)
-            cs2 = self._parse_type(type2_str)
-            return ProductColorSet(cs1, cs2)
+
+            # For product sets, if either component is timed, the product is timed.
+            # But in CPN ML, "timed" usually applies at the top-level. We'll assume
+            # that specifying 'timed' at top level makes the product timed.
+            cs1 = self._parse_type(type1_str, False)
+            cs2 = self._parse_type(type2_str, False)
+            return ProductColorSet(cs1, cs2, timed=timed)
 
         if type_str in self.colorsets:
-            return self.colorsets[type_str]
+            # If referencing another colorset, inherit timed from current definition
+            base_cs = self.colorsets[type_str]
+            # It's possible that the base isn't timed, but we want timed now.
+            # According to standard CPN ML rules, 'timed' is specified at top-level.
+            # We'll just override the timed attribute.
+            # A safer approach would be to raise an error if there's a conflict.
+            base_cs.timed = base_cs.timed or timed
+            return base_cs
 
         raise ValueError(f"Unknown type definition or reference: {type_str}")
 
@@ -205,15 +253,30 @@ class EvaluationContext:
             return True
         return bool(eval(guard_expr, self.env, binding))
 
-    def evaluate_arc(self, arc_expr: str, binding: Dict[str, Any]) -> List[Any]:
-        val = eval(arc_expr, self.env, binding)
+    def evaluate_arc(self, arc_expr: str, binding: Dict[str, Any]) -> (List[Any], int):
+        """
+        Evaluate the arc expression. We now also check for time delays using @+ syntax.
+        If found, separate the delay and return it along with the values.
+        """
+        delay = 0
+        # Check for time delay pattern @+
+        if "@+" in arc_expr:
+            # split on '@+'
+            parts = arc_expr.split('@+')
+            expr_part = parts[0].strip()
+            delay_part = parts[1].strip()
+            delay = eval(delay_part, self.env, binding)
+            val = eval(expr_part, self.env, binding)
+        else:
+            val = eval(arc_expr, self.env, binding)
+
         if isinstance(val, list):
-            return val
-        return [val]
+            return val, delay
+        return [val], delay
 
 
 # -----------------------------------------------------------------------------------
-# Place, Transition, Arc, CPN
+# Place, Transition, Arc, CPN with Time
 # -----------------------------------------------------------------------------------
 class Place:
     def __init__(self, name: str, colorset: ColorSet):
@@ -297,71 +360,74 @@ class CPN:
                 raise RuntimeError(f"No valid binding found for transition {t.name}.")
         if not self._check_enabled_with_binding(t, marking, context, binding):
             raise RuntimeError(f"Transition {t.name} is not enabled under the found binding.")
+
+        # Time: Before firing, ensure tokens consumed have timestamp <= global_clock
+        # Already checked in enabling.
+
         # Remove tokens
         for arc in self.get_input_arcs(t):
-            required_values = context.evaluate_arc(arc.expression, binding)
-            marking.remove_tokens(arc.source.name, required_values)
-        # Add tokens
+            values, _ = context.evaluate_arc(arc.expression, binding)
+            marking.remove_tokens(arc.source.name, values)
+
+        # Add tokens with proper timestamps
+        # Compute output token timestamps:
+        # new_timestamp = global_clock + arc_delay (no separate transition delay implemented here)
         for arc in self.get_output_arcs(t):
-            produced_values = context.evaluate_arc(arc.expression, binding)
-            marking.add_tokens(arc.target.name, produced_values)
+            values, arc_delay = context.evaluate_arc(arc.expression, binding)
+            for v in values:
+                # If colorset is timed, assign timestamp accordingly, else 0
+                place = arc.target
+                ts = marking.global_clock + arc_delay
+                # If target place has a timed color set:
+                if place.colorset.timed:
+                    marking.add_tokens(place.name, [v], timestamp=ts)
+                else:
+                    marking.add_tokens(place.name, [v], timestamp=0)
 
     def _check_enabled_with_binding(self, t: Transition, marking: Marking, context: EvaluationContext,
                                     binding: Dict[str, Any]) -> bool:
         if not context.evaluate_guard(t.guard_expr, binding):
             return False
+        # Check input arcs
         for arc in self.get_input_arcs(t):
-            required_values = context.evaluate_arc(arc.expression, binding)
+            values, _ = context.evaluate_arc(arc.expression, binding)
             place_marking = marking.get_multiset(arc.source.name)
-            required_ms = Multiset([Token(v) for v in required_values])
-            if not required_ms._counter <= place_marking._counter:
-                return False
+            # Check multiplicities and timestamps
+            # We must ensure enough tokens of given values and that their timestamps <= global_clock
+            for val in values:
+                # Count how many tokens of value are available and ready
+                ready_tokens = [tok for tok in place_marking.tokens if tok.value == val and tok.timestamp <= marking.global_clock]
+                if len(ready_tokens) < values.count(val):
+                    return False
         return True
 
     def _find_binding(self, t: Transition, marking: Marking, context: EvaluationContext) -> Optional[Dict[str, Any]]:
         """
         Attempt to find a binding for the variables of t that enables it.
-        We do a simple backtracking search over tokens in input places.
+        This is a naive approach, similar to the untimed version.
         """
         variables = t.variables
         input_arcs = self.get_input_arcs(t)
 
-        # Gather all candidate token values from input places that match the arcs' variable usage.
-        # This is tricky because arcs might not always have a direct variable-to-place mapping.
-        # For a simple approach, we consider all tokens from all input places as potential candidates
-        # for each variable.
-        candidate_values = []
-
-        # We attempt a general strategy:
-        # 1. Collect all tokens from input places.
-        # 2. We'll try to assign each variable a token from this pool that leads to a successful enabling.
-
+        # Gather a pool of candidate token values from input places
         token_pool = []
         for arc in input_arcs:
-            place_tokens = marking.get_multiset(arc.source.name)
-            for val, cnt in place_tokens._counter.items():
-                # add these token values 'cnt' times to the pool
-                token_pool.extend([val] * cnt)
-
-        # We now have a pool of token values. We'll try all combinations of assigning these values to the variables.
-        # For efficiency, if a variable does not appear in arcs or guard, it can still be assigned any value,
-        # but we might just pick from the pool arbitrarily.
+            place_tokens = marking.get_multiset(arc.source.name).tokens
+            # Only consider tokens that can potentially be used at the current global_clock
+            candidate_tokens = [tok for tok in place_tokens if tok.timestamp <= marking.global_clock]
+            token_pool.extend([t.value for t in candidate_tokens])
 
         return self._backtrack_binding(variables, token_pool, context, t, marking, {})
 
     def _backtrack_binding(self, variables: List[str], token_pool: List[Any], context: EvaluationContext,
-                           t: Transition, marking: Marking, partial_binding: Dict[str, Any]) -> Optional[
-        Dict[str, Any]]:
+                           t: Transition, marking: Marking, partial_binding: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # If we've assigned all variables, check if enabled
         if not variables:
-            # Check if enabled with this binding
             if self._check_enabled_with_binding(t, marking, context, partial_binding):
                 return partial_binding
             return None
 
         var = variables[0]
-        # Try assigning each token from token_pool to var
-        # To reduce complexity, we could try unique token values.
         tried_values = set()
         for val in token_pool:
             if val in tried_values:
@@ -369,14 +435,24 @@ class CPN:
             tried_values.add(val)
             new_binding = dict(partial_binding)
             new_binding[var] = val
-            # Check partial feasibility:
-            # It's expensive to check full enabling at each step; we just proceed and hope final check passes.
-            # For optimization, we could do partial checks here, but let's keep it simple.
-            # Move on to next variable
             res = self._backtrack_binding(variables[1:], token_pool, context, t, marking, new_binding)
             if res is not None:
                 return res
         return None
+
+    def advance_global_clock(self, marking: Marking):
+        """
+        Advance the global_clock to the next earliest token timestamp that might enable a transition.
+        If no such token exists, does nothing.
+        """
+        # Find all timestamps of tokens > current global_clock
+        future_ts = []
+        for ms in marking._marking.values():
+            for tok in ms.tokens:
+                if tok.timestamp > marking.global_clock:
+                    future_ts.append(tok.timestamp)
+        if future_ts:
+            marking.global_clock = min(future_ts)
 
     def __repr__(self):
         places_str = "\n    ".join(repr(p) for p in self.places)
@@ -388,13 +464,14 @@ class CPN:
 
 
 # -----------------------------------------------------------------------------------
-# Example Usage
+# Example Usage (Timed and Untimed)
 # -----------------------------------------------------------------------------------
 if __name__ == "__main__":
+    # Example with both untimed and timed color sets
     cs_definitions = """
-    colset INT = int;
+    colset INT = int timed;
     colset STRING = string;
-    colset PAIR = product(INT, STRING);
+    colset PAIR = product(INT, STRING) timed;
     """
 
     parser = ColorSetParser()
@@ -404,20 +481,22 @@ if __name__ == "__main__":
     pair_set = colorsets["PAIR"]
 
     # Create the CPN structure
-    p_int = Place("P_Int", int_set)
-    p_pair = Place("P_Pair", pair_set)
+    p_int = Place("P_Int", int_set)   # timed place
+    p_pair = Place("P_Pair", pair_set) # timed place
     t = Transition("T", guard="x > 10", variables=["x"])
 
     cpn = CPN()
     cpn.add_place(p_int)
     cpn.add_place(p_pair)
+    # Arc with time delay on output: (x, 'hello')@+5 means produced tokens get timestamp = global_clock + 5
     cpn.add_transition(t)
     cpn.add_arc(Arc(p_int, t, "x"))
-    cpn.add_arc(Arc(t, p_pair, "(x, 'hello')"))
+    cpn.add_arc(Arc(t, p_pair, "(x, 'hello') @+5"))
 
     # Create a separate marking
     marking = Marking()
-    marking.set_tokens("P_Int", [5, 12])  # Manage marking separately
+    # Tokens with timestamps; if none provided, default timestamp=0
+    marking.set_tokens("P_Int", [5, 12], timestamps=[0,0])
 
     user_code = """
 def double(n):
@@ -428,12 +507,13 @@ def double(n):
     print(cpn)
     print(marking)
 
-    print(cpn.is_enabled(t, marking, context, binding={"x": 5}))
-    print(cpn.is_enabled(t, marking, context, binding={"x": 12}))
+    # Check enabling
+    print("Is T enabled with x=5?", cpn.is_enabled(t, marking, context, binding={"x": 5}))
+    print("Is T enabled with x=12?", cpn.is_enabled(t, marking, context, binding={"x": 12}))
 
     # Check enabled without providing a binding
     print("Is T enabled without explicit binding?", cpn.is_enabled(t, marking, context))  # should find binding x=12
 
     # Fire the transition without providing a binding
     cpn.fire_transition(t, marking, context)
-    print(marking)
+    print(marking)  # should now have tokens in P_Pair with timestamp = global_clock + 5
