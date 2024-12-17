@@ -517,3 +517,5 @@ def double(n):
     # Fire the transition without providing a binding
     cpn.fire_transition(t, marking, context)
     print(marking)  # should now have tokens in P_Pair with timestamp = global_clock + 5
+
+    print(marking.global_clock)
