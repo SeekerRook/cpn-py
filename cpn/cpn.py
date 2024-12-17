@@ -111,10 +111,6 @@ class Marking:
         return self._marking.get(place_name, Multiset())
 
     def __repr__(self):
-        # Provide a readable representation of the current marking.
-        # Example: Marking:
-        #  P_Int: {12, 5}
-        #  P_Pair: {(12, 'hello')}
         lines = ["Marking:"]
         for place, ms in self._marking.items():
             lines.append(f"  {place}: {ms}")
@@ -198,6 +194,32 @@ class ColorSetParser:
         return -1
 
 # -----------------------------------------------------------------------------------
+# EvaluationContext
+# -----------------------------------------------------------------------------------
+class EvaluationContext:
+    """
+    Holds a Python execution environment for evaluating guard and arc expressions.
+    The user can provide custom Python code (like function definitions) to 'exec' into this environment.
+    Guards and arcs can then 'eval' in this environment.
+    """
+    def __init__(self, user_code: Optional[str] = None):
+        # A dedicated environment dict
+        self.env = {}
+        if user_code is not None:
+            exec(user_code, self.env)
+
+    def evaluate_guard(self, guard_expr: Optional[str], binding: Dict[str, Any]) -> bool:
+        if guard_expr is None:
+            return True
+        return bool(eval(guard_expr, self.env, binding))
+
+    def evaluate_arc(self, arc_expr: str, binding: Dict[str, Any]) -> List[Any]:
+        val = eval(arc_expr, self.env, binding)
+        if isinstance(val, list):
+            return val
+        return [val]
+
+# -----------------------------------------------------------------------------------
 # Place, Transition, Arc, CPN
 # -----------------------------------------------------------------------------------
 class Place:
@@ -214,11 +236,6 @@ class Transition:
         self.guard_expr = guard
         self.variables = variables if variables else []
 
-    def evaluate_guard(self, binding: Dict[str, Any]) -> bool:
-        if self.guard_expr is None:
-            return True
-        return bool(eval(self.guard_expr, {}, binding))
-
     def __repr__(self):
         guard_str = self.guard_expr if self.guard_expr is not None else "None"
         vars_str = ", ".join(self.variables) if self.variables else "None"
@@ -230,13 +247,6 @@ class Arc:
         self.target = target
         self.expression = expression
 
-    def evaluate(self, binding: Dict[str, Any]) -> List[Any]:
-        val = eval(self.expression, {}, binding)
-        if isinstance(val, list):
-            return val
-        else:
-            return [val]
-
     def __repr__(self):
         src_name = self.source.name if isinstance(self.source, Place) else self.source.name
         tgt_name = self.target.name if isinstance(self.target, Place) else self.target.name
@@ -247,14 +257,10 @@ class CPN:
         self.places: List[Place] = []
         self.transitions: List[Transition] = []
         self.arcs: List[Arc] = []
-        self.initial_marking = Marking()
+        # No marking here. Marking managed externally.
 
-    def add_place(self, place: Place, initial_tokens: Optional[List[Any]] = None):
+    def add_place(self, place: Place):
         self.places.append(place)
-        if initial_tokens is None:
-            initial_tokens = []
-        valid_tokens = [t for t in initial_tokens if place.colorset.is_member(t)]
-        self.initial_marking.set_tokens(place.name, valid_tokens)
 
     def add_transition(self, transition: Transition):
         self.transitions.append(transition)
@@ -280,38 +286,39 @@ class CPN:
     def get_output_arcs(self, t: Transition) -> List[Arc]:
         return [a for a in self.arcs if a.source == t and isinstance(a.target, Place)]
 
-    def is_enabled(self, t: Transition, binding: Dict[str, Any]) -> bool:
-        if not t.evaluate_guard(binding):
+    def is_enabled(self, t: Transition, binding: Dict[str, Any], marking: Marking, context: EvaluationContext) -> bool:
+        # Check guard
+        if not context.evaluate_guard(t.guard_expr, binding):
             return False
+
+        # Check input arcs
         for arc in self.get_input_arcs(t):
-            required_values = arc.evaluate(binding)
-            place_marking = self.initial_marking.get_multiset(arc.source.name)
+            required_values = context.evaluate_arc(arc.expression, binding)
+            place_marking = marking.get_multiset(arc.source.name)
             required_ms = Multiset([Token(v) for v in required_values])
             if not required_ms._counter <= place_marking._counter:
                 return False
         return True
 
-    def fire_transition(self, t: Transition, binding: Dict[str, Any]):
-        if not self.is_enabled(t, binding):
+    def fire_transition(self, t: Transition, binding: Dict[str, Any], marking: Marking, context: EvaluationContext):
+        if not self.is_enabled(t, binding, marking, context):
             raise RuntimeError(f"Transition {t.name} is not enabled under the given binding.")
 
         for arc in self.get_input_arcs(t):
-            required_values = arc.evaluate(binding)
-            self.initial_marking.remove_tokens(arc.source.name, required_values)
+            required_values = context.evaluate_arc(arc.expression, binding)
+            marking.remove_tokens(arc.source.name, required_values)
 
         for arc in self.get_output_arcs(t):
-            produced_values = arc.evaluate(binding)
-            self.initial_marking.add_tokens(arc.target.name, produced_values)
+            produced_values = context.evaluate_arc(arc.expression, binding)
+            marking.add_tokens(arc.target.name, produced_values)
 
     def __repr__(self):
         places_str = "\n    ".join(repr(p) for p in self.places)
         transitions_str = "\n    ".join(repr(t) for t in self.transitions)
         arcs_str = "\n    ".join(repr(a) for a in self.arcs)
-        marking_str = repr(self.initial_marking)
         return (f"CPN(\n  Places:\n    {places_str}\n\n"
                 f"  Transitions:\n    {transitions_str}\n\n"
-                f"  Arcs:\n    {arcs_str}\n\n"
-                f"  {marking_str}\n)")
+                f"  Arcs:\n    {arcs_str}\n)")
 
 # -----------------------------------------------------------------------------------
 # Example Usage
@@ -329,25 +336,38 @@ if __name__ == "__main__":
     int_set = colorsets["INT"]
     pair_set = colorsets["PAIR"]
 
+    # Create the CPN structure
     p_int = Place("P_Int", int_set)
     p_pair = Place("P_Pair", pair_set)
     t = Transition("T", guard="x > 10", variables=["x"])
 
     cpn = CPN()
-    cpn.add_place(p_int, initial_tokens=[5, 12])  # P_Int starts with tokens 5 and 12
-    cpn.add_place(p_pair)  # empty
+    cpn.add_place(p_int)
+    cpn.add_place(p_pair)
     cpn.add_transition(t)
-
     cpn.add_arc(Arc(p_int, t, "x"))
     cpn.add_arc(Arc(t, p_pair, "(x, 'hello')"))
 
+    # Create a separate marking
+    marking = Marking()
+    marking.set_tokens("P_Int", [5, 12])  # Manage marking separately
+
+    # Define a custom context with user code (functions)
+    user_code = """
+def double(n):
+    return n*2
+"""
+    context = EvaluationContext(user_code=user_code)
+
     print(cpn)
+    print(marking)
 
     binding = {"x": 5}
-    print("Is T enabled with x=5?", cpn.is_enabled(t, binding))
+    print("Is T enabled with x=5?", cpn.is_enabled(t, binding, marking, context))  # False
 
     binding = {"x": 12}
-    print("Is T enabled with x=12?", cpn.is_enabled(t, binding))
-    cpn.fire_transition(t, binding)
+    print("Is T enabled with x=12?", cpn.is_enabled(t, binding, marking, context)) # True
 
-    print(cpn)
+    # Fire the transition
+    cpn.fire_transition(t, binding, marking, context)
+    print(marking)
