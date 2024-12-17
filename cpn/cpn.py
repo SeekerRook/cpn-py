@@ -273,15 +273,16 @@ class Place:
 
 
 class Transition:
-    def __init__(self, name: str, guard: Optional[str] = None, variables: Optional[List[str]] = None):
+    def __init__(self, name: str, guard: Optional[str] = None, variables: Optional[List[str]] = None, transition_delay: int = 0):
         self.name = name
         self.guard_expr = guard
         self.variables = variables if variables else []
+        self.transition_delay = transition_delay
 
     def __repr__(self):
         guard_str = self.guard_expr if self.guard_expr is not None else "None"
         vars_str = ", ".join(self.variables) if self.variables else "None"
-        return f"Transition(name='{self.name}', guard='{guard_str}', variables=[{vars_str}])"
+        return f"Transition(name='{self.name}', guard='{guard_str}', variables=[{vars_str}], delay={self.transition_delay})"
 
 
 class Arc:
@@ -356,11 +357,9 @@ class CPN:
             values, arc_delay = context.evaluate_arc(arc.expression, binding)
             for v in values:
                 place = arc.target
-                ts = marking.global_clock + arc_delay
-                # If target place is timed, use computed timestamp
-                # If not timed, timestamp stays 0
+                new_timestamp = marking.global_clock + t.transition_delay + arc_delay
                 if place.colorset.timed:
-                    marking.add_tokens(place.name, [v], timestamp=ts)
+                    marking.add_tokens(place.name, [v], timestamp=new_timestamp)
                 else:
                     marking.add_tokens(place.name, [v], timestamp=0)
 
@@ -454,12 +453,13 @@ if __name__ == "__main__":
     # Create the CPN structure
     p_int = Place("P_Int", int_set)      # timed place
     p_pair = Place("P_Pair", pair_set)   # timed place
-    t = Transition("T", guard="x > 10", variables=["x"])
+    # Added transition_delay=2 as an example
+    t = Transition("T", guard="x > 10", variables=["x"], transition_delay=2)
 
     cpn = CPN()
     cpn.add_place(p_int)
     cpn.add_place(p_pair)
-    # Arc with time delay on output: produced tokens get timestamp = global_clock + 5
+    # Arc with time delay on output: produced tokens get timestamp = global_clock + transition_delay + arc_delay
     cpn.add_transition(t)
     cpn.add_arc(Arc(p_int, t, "x"))
     cpn.add_arc(Arc(t, p_pair, "(x, 'hello') @+5"))
@@ -487,8 +487,7 @@ def double(n):
     cpn.fire_transition(t, marking, context)
     print(marking)
 
-    # The global clock is still 0 because we didn't advance it.
-    # The produced token has timestamp = 0 + 5 = 5.
-    # If we now advance the global clock:
+    # The global clock is still 0.
+    # The produced token has timestamp = global_clock + transition_delay (2) + arc_delay (5) = 7.
     cpn.advance_global_clock(marking)
     print("After advancing global clock:", marking.global_clock)
