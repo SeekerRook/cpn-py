@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "colorSets": {
+      "description": "An array of color set definitions as strings, each ending with a semicolon and following the 'colset' format.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "places": {
+      "description": "An array of place definitions.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Unique name of the place.",
+            "type": "string"
+          },
+          "colorSet": {
+            "description": "Reference to a previously defined color set name.",
+            "type": "string"
+          }
+        },
+        "required": ["name", "colorSet"]
+      }
+    },
+    "transitions": {
+      "description": "An array of transition definitions.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Unique name of the transition.",
+            "type": "string"
+          },
+          "guard": {
+            "description": "An optional guard expression as a Python expression string.",
+            "type": "string"
+          },
+          "variables": {
+            "description": "List of variable names (strings) to be used in guard or arc expressions.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "transitionDelay": {
+            "description": "An optional integer delay for the transition.",
+            "type": "integer",
+            "default": 0
+          },
+          "inArcs": {
+            "description": "Arcs from places to this transition.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "place": {
+                  "description": "Name of the source place.",
+                  "type": "string"
+                },
+                "expression": {
+                  "description": "Python expression string to evaluate tokens consumed by this arc.",
+                  "type": "string"
+                }
+              },
+              "required": ["place", "expression"]
+            }
+          },
+          "outArcs": {
+            "description": "Arcs from this transition to places.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "place": {
+                  "description": "Name of the target place.",
+                  "type": "string"
+                },
+                "expression": {
+                  "description": "Python expression string for tokens produced. May use '@+<int>' for time delays.",
+                  "type": "string"
+                }
+              },
+              "required": ["place", "expression"]
+            }
+          }
+        },
+        "required": ["name", "inArcs", "outArcs"]
+      }
+    },
+    "initialMarking": {
+      "description": "Initial marking of the Petri net. A map from place name to tokens.",
+      "type": "object",
+      "patternProperties": {
+        "^[A-Za-z_][A-Za-z0-9_]*$": {
+          "type": "object",
+          "properties": {
+            "tokens": {
+              "description": "List of token values (integers, strings, or tuples if supported) for that place.",
+              "type": "array",
+              "items": {}
+            },
+            "timestamps": {
+              "description": "Optional list of timestamps, aligned with tokens, defaulting to 0 if not provided.",
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          "required": ["tokens"]
+        }
+      }
+    },
+    "evaluationContext": {
+      "description": "Null or a path to a Python file with user-defined code.",
+      "type": ["string", "null"]
+    }
+  },
+  "required": ["places", "transitions", "initialMarking"]
+}
