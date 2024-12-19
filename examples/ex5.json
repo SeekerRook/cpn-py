@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "colorSets": [
+    "colset IntSet = int;",
+    "colset ColorNames = {'red','green','blue'};",
+    "colset PairSet = product(IntSet, ColorNames);",
+    "colset TimedInts = int timed;"
+  ],
+  "places": [
+    {
+      "name": "Place1",
+      "colorSet": "IntSet"
+    },
+    {
+      "name": "Place2",
+      "colorSet": "ColorNames"
+    },
+    {
+      "name": "Place3",
+      "colorSet": "PairSet"
+    },
+    {
+      "name": "TimedPlace",
+      "colorSet": "TimedInts"
+    }
+  ],
+  "transitions": [
+    {
+      "name": "T1",
+      "variables": ["x", "c"],
+      "guard": "x > 0",
+      "transitionDelay": 0,
+      "inArcs": [
+        {
+          "place": "Place1",
+          "expression": "x"
+        },
+        {
+          "place": "Place2",
+          "expression": "c"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "Place3",
+          "expression": "(x, c)"
+        }
+      ]
+    },
+    {
+      "name": "T2",
+      "variables": ["y"],
+      "transitionDelay": 0,
+      "inArcs": [
+        {
+          "place": "TimedPlace",
+          "expression": "y"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "TimedPlace",
+          "expression": "y @+2"
+        }
+      ]
+    }
+  ],
+  "initialMarking": {
+    "Place1": {
+      "tokens": [1, 2]
+    },
+    "Place2": {
+      "tokens": ["red", "green"]
+    },
+    "Place3": {
+      "tokens": []
+    },
+    "TimedPlace": {
+      "tokens": [10],
+      "timestamps": [0.0]
+    }
+  },
+  "evaluationContext": null
+}
