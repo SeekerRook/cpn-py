@@ -277,7 +277,7 @@ exported_json = export_cpn_to_json(cpn, marking, context, "cpn_exported.json", "
 
 ## Validation Against the Schema
 
-The JSON format is defined by `files/validation.schema`. You can use a JSON Schema validator (such as `jsonschema`) to ensure your input JSON is valid:
+The JSON format is defined by `files/validation_schema.json`. You can use a JSON Schema validator (such as `jsonschema`) to ensure your input JSON is valid:
 
 ```bash
 pip install jsonschema
@@ -290,7 +290,7 @@ import jsonschema
 
 with open("cpn_definition.json") as f:
     data = json.load(f)
-with open("files/validation.schema") as sf:
+with open("files/validation_schema.json") as sf:
     schema = json.load(sf)
 
 jsonschema.validate(instance=data, schema=schema)
