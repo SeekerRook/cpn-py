@@ -233,6 +233,76 @@ print("After advancing clock:", marking.global_clock)
 
 ---
 
+## Importing a CPN from JSON
+
+You can define your CPN in a JSON file and import it using `importer.py`. The JSON must follow the structure enforced by `files/validation.schema`.
+
+**Example:**
+```python
+import json
+from cpnpy.cpn.importer import import_cpn_from_json
+
+with open("cpn_definition.json", "r") as f:
+    data = json.load(f)
+
+cpn, marking, context = import_cpn_from_json(data)
+
+# Now 'cpn' is a CPN object, 'marking' is the initial marking, and 'context' is the evaluation context.
+```
+
+**Key Points:**
+- The `colorSets` field in the JSON should be a list of color set definitions, each ending with a `;`.
+- `places`, `transitions`, and `initialMarking` define the net structure and initial state.
+- `evaluationContext` can specify a file path or inline code snippet for user-defined functions.
+
+---
+
+## Exporting a CPN to JSON
+
+You can also export an existing CPN and marking to a JSON file that matches the schema. The `exporter.py` provides this functionality:
+
+**Example:**
+```python
+from cpnpy.cpn.exporter import export_cpn_to_json
+
+# Assuming you have a CPN, marking, and context objects as before
+exported_json = export_cpn_to_json(cpn, marking, context, "cpn_exported.json", "user_code_exported.py")
+
+# The exported_json dictionary will have all the data. 
+# Additionally, the JSON will be written to "cpn_exported.json".
+# If user code was embedded, it is exported to "user_code_exported.py".
+```
+
+---
+
+## Validation Against the Schema
+
+The JSON format is defined by `files/validation.schema`. You can use a JSON Schema validator (such as `jsonschema`) to ensure your input JSON is valid:
+
+```bash
+pip install jsonschema
+```
+
+**Example:**
+```python
+import json
+import jsonschema
+
+with open("cpn_definition.json") as f:
+    data = json.load(f)
+with open("files/validation.schema") as sf:
+    schema = json.load(sf)
+
+jsonschema.validate(instance=data, schema=schema)
+print("JSON is valid!")
+```
+
+If the JSON is invalid, `jsonschema` will raise a `jsonschema.exceptions.ValidationError` with details.
+
+---
+
+---
+
 ## Additional Notes
 
 - **Bindings and Guard Evaluation:** Guards and arc expressions are Python code snippets evaluated under a user-defined `EvaluationContext`. This allows integrating custom logic (functions, constants) into your CPN model.
