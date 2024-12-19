@@ -1,7 +1,5 @@
 import json
 
-import pm4py
-
 from cpnpy.cpn.cpn_imp import *   # Assuming this includes the classes CPN, Marking, etc.
 from cpnpy.cpn.importer import import_cpn_from_json
 from typing import Dict, Any
@@ -9,9 +7,10 @@ from copy import deepcopy
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 from cpnpy.simulation.ocel_simu import simulate_cpn_to_ocel
+import pm4py
 
 
-json_data = json.load(open("../../files/bigger_cpns/hospital.json", "r"))
+json_data = json.load(open("../../files/bigger_cpns/electronic_manufacturing.json", "r"))
 schema = json.load(open("../../files/validation_schema.json", "r"))
 
 try:

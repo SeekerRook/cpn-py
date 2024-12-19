@@ -1,6 +1,6 @@
+from cpnpy.cpn.cpn_imp import *
 import copy
 import pandas as pd
-from cpnpy.cpn.cpn_imp import *
 from pm4py.objects.ocel.obj import OCEL
 
 
@@ -9,6 +9,7 @@ def simulate_cpn_to_ocel(cpn: CPN, initial_marking: Marking, context: Evaluation
     Simulate the given CPN starting from the given initial marking, and return an OCEL object.
     Each fired transition is recorded as an event.
     Input and output tokens for each event are considered as related objects.
+    The object type is derived from the place's color set.
     """
     marking = copy.deepcopy(initial_marking)
 
@@ -19,17 +20,13 @@ def simulate_cpn_to_ocel(cpn: CPN, initial_marking: Marking, context: Evaluation
 
     event_counter = 1
 
-    # Helper to guess object type from a place or other logic
-    def get_object_type(place_name: str) -> str:
-        return f"type_{place_name}"
-
-    # Helper to safely get object ID as a hashable value (stringify non-hashable objects)
+    # Helper to safely get object ID as a hashable value (stringify if necessary)
     def make_object_id(value):
-        # If it's not hashable, convert to string
-        # Or simply always convert to string to ensure consistent behavior
-        if isinstance(value, list) or isinstance(value, dict) or isinstance(value, set) or isinstance(value, tuple):
-            return str(value)
         return str(value)
+
+    # Helper to determine object type from a place's color set
+    def get_object_type_from_colorset(place):
+        return place.colorset.name
 
     # Run simulation until no transition is enabled
     while True:
@@ -50,18 +47,16 @@ def simulate_cpn_to_ocel(cpn: CPN, initial_marking: Marking, context: Evaluation
                 # After advancing clock, check again
                 continue
 
-        # Fire an arbitrary enabled transition (or define a selection strategy)
+        # Fire an arbitrary enabled transition
         t = enabled_transitions[0]
 
         # Determine the actual binding used to fire
         binding = cpn._find_binding(t, marking, context)
         if binding is None:
-            # If no binding found, skip (this should not normally happen since we checked is_enabled)
+            # If no binding found, skip (should be rare)
             break
 
-        # Add a minuscule increment to the event timestamp to preserve ordering
-        # even if multiple events occur at the same logical time.
-        # Here, we add a microsecond per event.
+        # Add a minuscule increment (1 microsecond per event) to the event timestamp
         event_timestamp = pd.to_datetime(marking.global_clock, unit='s', utc=True) + pd.to_timedelta(event_counter,
                                                                                                      unit='us')
 
@@ -71,23 +66,23 @@ def simulate_cpn_to_ocel(cpn: CPN, initial_marking: Marking, context: Evaluation
         # Identify related objects from input and output arcs
         related_objects = set()
 
-        # For input arcs, tokens to be removed are the input objects
+        # For input arcs
         for arc in cpn.get_input_arcs(t):
             values, _ = context.evaluate_arc(arc.expression, binding)
+            otype = get_object_type_from_colorset(arc.source)  # derive from source place's color set
             for v in values:
                 obj_id = make_object_id(v)
-                otype = get_object_type(arc.source.name)
                 related_objects.add((obj_id, otype))
 
         # Fire transition (this will modify the marking)
         cpn.fire_transition(t, marking, context, binding)
 
-        # For output arcs, tokens added are related objects too
+        # For output arcs
         for arc in cpn.get_output_arcs(t):
             values, arc_delay = context.evaluate_arc(arc.expression, binding)
+            otype = get_object_type_from_colorset(arc.target)  # derive from target place's color set
             for v in values:
                 obj_id = make_object_id(v)
-                otype = get_object_type(arc.target.name)
                 related_objects.add((obj_id, otype))
 
         # Event ID

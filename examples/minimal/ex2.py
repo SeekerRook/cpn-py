@@ -1,6 +1,7 @@
 from cpnpy.cpn.cpn_imp import *
 from cpnpy.simulation.ocel_simu import simulate_cpn_to_ocel
 from copy import deepcopy
+import pm4py
 
 
 # Example with timed color sets
@@ -64,4 +65,4 @@ print(marking)
 cpn.advance_global_clock(marking)
 print("After advancing global clock:", marking.global_clock)
 
-
+#pm4py.write_ocel2(ocel, "../../prova2.xml")

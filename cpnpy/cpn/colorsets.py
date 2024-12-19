@@ -7,12 +7,19 @@ from typing import Any, Dict, List
 # -----------------------------------------------------------------------------------
 
 class ColorSet(ABC):
-    def __init__(self, timed: bool = False):
+    def __init__(self, timed: bool = False, name: str = None):
         self.timed = timed
+        self.name = name  # name will be assigned later by the parser if not provided
 
     @abstractmethod
     def is_member(self, value: Any) -> bool:
         pass
+
+    def __repr__(self):
+        # Default representation if not overridden
+        timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}ColorSet{timed_str}"
 
 
 class IntegerColorSet(ColorSet):
@@ -21,7 +28,8 @@ class IntegerColorSet(ColorSet):
 
     def __repr__(self):
         timed_str = " timed" if self.timed else ""
-        return f"IntegerColorSet{timed_str}"
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}IntegerColorSet{timed_str}"
 
 
 class RealColorSet(ColorSet):
@@ -30,7 +38,8 @@ class RealColorSet(ColorSet):
 
     def __repr__(self):
         timed_str = " timed" if self.timed else ""
-        return f"RealColorSet{timed_str}"
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}RealColorSet{timed_str}"
 
 
 class StringColorSet(ColorSet):
@@ -39,12 +48,13 @@ class StringColorSet(ColorSet):
 
     def __repr__(self):
         timed_str = " timed" if self.timed else ""
-        return f"StringColorSet{timed_str}"
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}StringColorSet{timed_str}"
 
 
 class EnumeratedColorSet(ColorSet):
-    def __init__(self, values: List[str], timed: bool = False):
-        super().__init__(timed=timed)
+    def __init__(self, values: List[str], timed: bool = False, name: str = None):
+        super().__init__(timed=timed, name=name)
         self.values = values
 
     def is_member(self, value: Any) -> bool:
@@ -52,13 +62,14 @@ class EnumeratedColorSet(ColorSet):
 
     def __repr__(self):
         timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
         values_str = ", ".join(repr(v) for v in self.values)
-        return f"EnumeratedColorSet({{{values_str}}}){timed_str}"
+        return f"{name_str}EnumeratedColorSet({{{values_str}}}){timed_str}"
 
 
 class ProductColorSet(ColorSet):
-    def __init__(self, cs1: ColorSet, cs2: ColorSet, timed: bool = False):
-        super().__init__(timed=timed)
+    def __init__(self, cs1: ColorSet, cs2: ColorSet, timed: bool = False, name: str = None):
+        super().__init__(timed=timed, name=name)
         self.cs1 = cs1
         self.cs2 = cs2
 
@@ -69,7 +80,8 @@ class ProductColorSet(ColorSet):
 
     def __repr__(self):
         timed_str = " timed" if self.timed else ""
-        return f"ProductColorSet({repr(self.cs1)}, {repr(self.cs2)}){timed_str}"
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}ProductColorSet({repr(self.cs1)}, {repr(self.cs2)}){timed_str}"
 
 
 # -----------------------------------------------------------------------------------
@@ -108,6 +120,7 @@ class ColorSetParser:
             type_str = type_str[:-5].strip()
 
         cs = self._parse_type(type_str, timed)
+        cs.name = name  # Assign the parsed name to the colorset
         self.colorsets[name] = cs
 
     def _parse_type(self, type_str: str, timed: bool) -> ColorSet:
@@ -132,7 +145,6 @@ class ColorSetParser:
 
             cs1 = self._parse_type(type1_str, False)
             cs2 = self._parse_type(type2_str, False)
-            # If the top-level said timed, the product is timed.
             return ProductColorSet(cs1, cs2, timed=timed)
 
         if type_str in self.colorsets:
@@ -150,7 +162,6 @@ class ColorSetParser:
             raise ValueError("Enumerated color set cannot be empty.")
 
         # Enumerations are separated by commas, we assume each value is quoted
-        # (e.g., 'red', 'green').
         values = [v.strip() for v in inner.split(",")]
         parsed_values = []
         for val in values:
