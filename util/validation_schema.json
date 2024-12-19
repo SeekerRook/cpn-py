@@ -3,7 +3,7 @@
   "type": "object",
   "properties": {
     "colorSets": {
-      "description": "A list of color set definitions. Each definition is a single string that must:\n\n1. Begin with the keyword 'colset'.\n2. Follow with a name for the color set (e.g., 'colset MySet = int;').\n3. Include an assignment '=' to specify the type of the color set.\n4. End with a semicolon (';').\n\nExamples of valid color set definitions:\n- \"colset IntSet = int;\"\n- \"colset ColorNames = { 'red', 'green', 'blue' };\" (an enumerated color set)\n- \"colset TimedInts = int timed;\" (a timed color set)\n- \"colset PairSet = product(IntSet, ColorNames);\" (a product of two previously defined color sets)\n\nSupported types:\n- \"int\" for an integer color set.\n- \"string\" for a string color set.\n- An enumerated set of values within braces, e.g. { 'red', 'green', ... }.\n- A product of two color sets using \"product(<ColorSet1>, <ColorSet2>)\".\n- The keyword \"timed\" can be appended to the definition to indicate that tokens of that color set carry a timestamp.\n\nAll color set references in other definitions must be previously defined in this list, or defined earlier within the same list.",
+      "description": "A list of color set definitions. Each definition is a single string that must:\n\n1. Begin with the keyword 'colset'.\n2. Follow with a name for the color set (e.g., 'colset MySet = int;').\n3. Include an assignment '=' to specify the type of the color set.\n4. End with a semicolon (';').\n\nExamples of valid color set definitions:\n- \"colset IntSet = int;\"\n- \"colset RealValues = real;\"\n- \"colset ColorNames = { 'red', 'green', 'blue' };\" (an enumerated color set)\n- \"colset TimedInts = int timed;\" (a timed color set)\n- \"colset PairSet = product(IntSet, ColorNames);\" (a product of two previously defined color sets)\n\nSupported base types:\n- \"int\" for an integer color set.\n- \"real\" for a floating-point (real) color set.\n- \"string\" for a string color set.\n\nAdditionally, enumerated sets of values (e.g. { 'red', 'green', ... }) and products of two defined color sets using \"product(<ColorSet1>, <ColorSet2>)\" are supported.\n\nThe keyword \"timed\" can be appended to indicate that tokens of that color set carry a timestamp.\n\nAll color set references in other definitions must be previously defined in this list, or defined earlier within the same list.",
       "type": "array",
       "items": {
         "type": "string"
@@ -50,8 +50,8 @@
             "default": []
           },
           "transitionDelay": {
-            "description": "An optional integer representing a global time delay added whenever this transition fires.",
-            "type": "integer",
+            "description": "An optional numeric delay added whenever this transition fires. May be an integer or a floating-point value.",
+            "type": "number",
             "default": 0
           },
           "inArcs": {
@@ -73,7 +73,7 @@
             }
           },
           "outArcs": {
-            "description": "An array of output arcs from this transition to places. Each arc specifies the target place and the expression that generates produced tokens. The expression may contain '@+<int>' to add an additional time delay for produced tokens.",
+            "description": "An array of output arcs from this transition to places. Each arc specifies the target place and the expression that generates produced tokens. The expression may contain '@+<number>' to add an additional time delay for produced tokens.",
             "type": "array",
             "items": {
               "type": "object",
@@ -83,7 +83,7 @@
                   "type": "string"
                 },
                 "expression": {
-                  "description": "A Python expression (string) that, when evaluated, yields the tokens to produce at the target place. May include a '@+<int>' segment to specify an extra delay on token timestamps.",
+                  "description": "A Python expression (string) that, when evaluated, yields the tokens to produce at the target place. May include a '@+<number>' segment to specify an extra delay on token timestamps.",
                   "type": "string"
                 }
               },
@@ -102,15 +102,15 @@
           "type": "object",
           "properties": {
             "tokens": {
-              "description": "A list of initial tokens for the place. Each token can be an integer, string, or tuple (depending on the defined color sets).",
+              "description": "A list of initial tokens for the place. Each token can be an integer, real number, string, or tuple (depending on the defined color sets).",
               "type": "array",
               "items": {}
             },
             "timestamps": {
-              "description": "An optional list of timestamps for each token in 'tokens'. If not provided, all tokens default to a timestamp of 0. If provided, must match the length of 'tokens'.",
+              "description": "An optional list of timestamps for each token in 'tokens'. If not provided, all tokens default to a timestamp of 0. If provided, it must match the length of 'tokens'. These timestamps can be integers or real numbers.",
               "type": "array",
               "items": {
-                "type": "integer"
+                "type": "number"
               }
             }
           },
