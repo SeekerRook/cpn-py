@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Any, Dict
 from cpn.colorsets import *
 
 
@@ -21,7 +21,6 @@ class Multiset:
     def __init__(self, tokens: Optional[List[Token]] = None):
         if tokens is None:
             tokens = []
-        # We'll store a list of tokens (with timestamps)
         self.tokens = tokens
 
     def add(self, token_value: Any, timestamp: int = 0, count: int = 1):
@@ -29,12 +28,10 @@ class Multiset:
             self.tokens.append(Token(token_value, timestamp))
 
     def remove(self, token_value: Any, count: int = 1):
-        # Removing tokens can be tricky if timed. The occurrence rule states:
-        # For tokens of the same color, we should consume the one with the largest timestamp.
+        # Removing tokens that match token_value, preferring the ones with largest timestamp first
         matching = [t for t in self.tokens if t.value == token_value]
         if len(matching) < count:
             raise ValueError("Not enough tokens to remove.")
-        # Sort by timestamp descending, consume largest first.
         matching.sort(key=lambda x: x.timestamp, reverse=True)
         to_remove = matching[:count]
         for tr in to_remove:
@@ -44,8 +41,6 @@ class Multiset:
         return sum(1 for t in self.tokens if t.value == token_value)
 
     def __le__(self, other: 'Multiset') -> bool:
-        # For enabling checks (without considering exact timestamps),
-        # we just ensure that for each value we need, other has at least that many.
         self_counts = Counter(t.value for t in self.tokens)
         other_counts = Counter(t.value for t in other.tokens)
         for val, cnt in self_counts.items():
@@ -119,10 +114,6 @@ class EvaluationContext:
         return bool(eval(guard_expr, self.env, binding))
 
     def evaluate_arc(self, arc_expr: str, binding: Dict[str, Any]) -> (List[Any], int):
-        """
-        Evaluate the arc expression. We now also check for time delays using @+ syntax.
-        If found, separate the delay and return it along with the values.
-        """
         delay = 0
         if "@+" in arc_expr:
             parts = arc_expr.split('@+')
@@ -260,40 +251,73 @@ class CPN:
         variables = t.variables
         input_arcs = self.get_input_arcs(t)
 
-        # Gather a pool of candidate token values from input places that are ready
+        # Gather candidate tokens from input places that are ready
         token_pool = []
         for arc in input_arcs:
             place_tokens = marking.get_multiset(arc.source.name).tokens
             candidate_tokens = [tok for tok in place_tokens if tok.timestamp <= marking.global_clock]
-            token_pool.extend([t.value for t in candidate_tokens])
+            token_pool.extend(candidate_tokens)
 
-        return self._backtrack_binding(variables, token_pool, context, t, marking, {})
+        return self._backtrack_binding(variables, token_pool, context, t, marking, {}, set())
 
-    def _backtrack_binding(self, variables: List[str], token_pool: List[Any], context: EvaluationContext,
-                           t: Transition, marking: Marking, partial_binding: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _backtrack_binding(self, variables: List[str], token_pool: List[Token], context: EvaluationContext,
+                           t: Transition, marking: Marking, partial_binding: Dict[str, Any],
+                           used_indices: set) -> Optional[Dict[str, Any]]:
         if not variables:
+            # Check if this binding actually enables the transition
             if self._check_enabled_with_binding(t, marking, context, partial_binding):
                 return partial_binding
             return None
 
         var = variables[0]
-        tried_values = set()
-        for val in token_pool:
-            if val in tried_values:
+        for i, tok in enumerate(token_pool):
+            if i in used_indices:
                 continue
-            tried_values.add(val)
+            # Try assigning tok.value to var
             new_binding = dict(partial_binding)
-            new_binding[var] = val
-            res = self._backtrack_binding(variables[1:], token_pool, context, t, marking, new_binding)
+            new_binding[var] = tok.value
+            used_indices.add(i)
+            res = self._backtrack_binding(variables[1:], token_pool, context, t, marking, new_binding, used_indices)
             if res is not None:
                 return res
+            used_indices.remove(i)
         return None
 
+    def _find_all_bindings(self, t: Transition, marking: Marking, context: EvaluationContext) -> List[Dict[str, Any]]:
+        variables = t.variables
+        input_arcs = self.get_input_arcs(t)
+
+        # Gather candidate tokens from input places that are ready
+        token_pool = []
+        for arc in input_arcs:
+            place_tokens = marking.get_multiset(arc.source.name).tokens
+            candidate_tokens = [tok for tok in place_tokens if tok.timestamp <= marking.global_clock]
+            token_pool.extend(candidate_tokens)
+
+        solutions = []
+        self._backtrack_all_bindings(variables, token_pool, context, t, marking, {}, set(), solutions)
+        return solutions
+
+    def _backtrack_all_bindings(self, variables: List[str], token_pool: List[Token], context: EvaluationContext,
+                                t: Transition, marking: Marking, partial_binding: Dict[str, Any],
+                                used_indices: set, solutions: List[Dict[str, Any]]):
+        if not variables:
+            # Check if this binding actually enables the transition
+            if self._check_enabled_with_binding(t, marking, context, partial_binding):
+                solutions.append(dict(partial_binding))
+            return
+
+        var = variables[0]
+        for i, tok in enumerate(token_pool):
+            if i in used_indices:
+                continue
+            new_binding = dict(partial_binding)
+            new_binding[var] = tok.value
+            used_indices.add(i)
+            self._backtrack_all_bindings(variables[1:], token_pool, context, t, marking, new_binding, used_indices, solutions)
+            used_indices.remove(i)
+
     def advance_global_clock(self, marking: Marking):
-        """
-        Advance the global_clock to the next earliest token timestamp that might enable a transition.
-        If no such token exists, does nothing.
-        """
         future_ts = []
         for ms in marking._marking.values():
             for tok in ms.tokens:
@@ -309,6 +333,7 @@ class CPN:
         return (f"CPN(\n  Places:\n    {places_str}\n\n"
                 f"  Transitions:\n    {transitions_str}\n\n"
                 f"  Arcs:\n    {arcs_str}\n)")
+
 
 
 # -----------------------------------------------------------------------------------
@@ -328,21 +353,17 @@ if __name__ == "__main__":
     int_set = colorsets["INT"]
     pair_set = colorsets["PAIR"]
 
-    # Create the CPN structure
     p_int = Place("P_Int", int_set)      # timed place
     p_pair = Place("P_Pair", pair_set)   # timed place
-    # Added transition_delay=2 as an example
     t = Transition("T", guard="x > 10", variables=["x"], transition_delay=2)
 
     cpn = CPN()
     cpn.add_place(p_int)
     cpn.add_place(p_pair)
-    # Arc with time delay on output: produced tokens get timestamp = global_clock + transition_delay + arc_delay
     cpn.add_transition(t)
     cpn.add_arc(Arc(p_int, t, "x"))
     cpn.add_arc(Arc(t, p_pair, "(x, 'hello') @+5"))
 
-    # Create a marking
     marking = Marking()
     marking.set_tokens("P_Int", [5, 12])  # both at timestamp 0
     print(cpn)
@@ -354,18 +375,21 @@ def double(n):
 """
     context = EvaluationContext(user_code=user_code)
 
-    # Check enabling
+    # Check enabling with explicit binding
     print("Is T enabled with x=5?", cpn.is_enabled(t, marking, context, binding={"x": 5}))
     print("Is T enabled with x=12?", cpn.is_enabled(t, marking, context, binding={"x": 12}))
 
     # Check enabled without providing a binding
     print("Is T enabled without explicit binding?", cpn.is_enabled(t, marking, context))
 
+    # Find all possible bindings
+    all_bindings = cpn._find_all_bindings(t, marking, context)
+    print("All possible bindings for T:", all_bindings)
+
     # Fire the transition (this should consume the token with value 12)
     cpn.fire_transition(t, marking, context)
     print(marking)
 
-    # The global clock is still 0.
-    # The produced token has timestamp = global_clock + transition_delay (2) + arc_delay (5) = 7.
+    # Advance global clock
     cpn.advance_global_clock(marking)
     print("After advancing global clock:", marking.global_clock)
