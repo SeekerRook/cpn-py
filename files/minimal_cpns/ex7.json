@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "colorSets": [
+    "colset INT = int;",
+    "colset Data = string;",
+    "colset Packet = product(INT, Data);"
+  ],
+  "places": [
+    {
+      "name": "AllPackets",
+      "colorSet": "Packet"
+    },
+    {
+      "name": "A",
+      "colorSet": "Packet"
+    },
+    {
+      "name": "B",
+      "colorSet": "Packet"
+    },
+    {
+      "name": "DataReceived",
+      "colorSet": "Data"
+    },
+    {
+      "name": "NextSend",
+      "colorSet": "INT"
+    },
+    {
+      "name": "D",
+      "colorSet": "INT"
+    },
+    {
+      "name": "C",
+      "colorSet": "INT"
+    },
+    {
+      "name": "NextRec",
+      "colorSet": "INT"
+    }
+  ],
+  "transitions": [
+    {
+      "name": "Send Packet",
+      "variables": ["n", "d"],
+      "inArcs": [
+        {
+          "place": "AllPackets",
+          "expression": "(n,d)"
+        },
+        {
+          "place": "NextSend",
+          "expression": "n"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "A",
+          "expression": "(n,d)"
+        }
+      ]
+    },
+    {
+      "name": "Transmit Packet",
+      "variables": ["n", "d", "success"],
+      "transitionDelay": 0,
+      "inArcs": [
+        {
+          "place": "A",
+          "expression": "(n,d)"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "B",
+          "expression": "[(n,d)] if success else [] @+5"
+        }
+      ]
+    },
+    {
+      "name": "Receive Packet",
+      "variables": ["n", "d", "k"],
+      "inArcs": [
+        {
+          "place": "B",
+          "expression": "(n,d)"
+        },
+        {
+          "place": "NextRec",
+          "expression": "k"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "DataReceived",
+          "expression": "[d] if n==k else ['data'] @+17"
+        },
+        {
+          "place": "NextRec",
+          "expression": "[k+1] if n==k else [k]"
+        }
+      ]
+    },
+    {
+      "name": "Receive Ack",
+      "variables": ["n", "k", "success"],
+      "inArcs": [
+        {
+          "place": "NextSend",
+          "expression": "n"
+        },
+        {
+          "place": "C",
+          "expression": "k"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "D",
+          "expression": "[n] if success else [] @+7"
+        },
+        {
+          "place": "NextSend",
+          "expression": "[n+1] if n==k else [n]"
+        }
+      ]
+    },
+    {
+      "name": "Transmit Ack",
+      "variables": ["n", "success"],
+      "inArcs": [
+        {
+          "place": "D",
+          "expression": "n"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "C",
+          "expression": "[n] if success else [] @+10"
+        }
+      ]
+    }
+  ],
+  "initialMarking": {
+    "AllPackets": {
+      "tokens": [[0, "Hello"], [1, "World"]]
+    },
+    "NextSend": {
+      "tokens": [0]
+    },
+    "NextRec": {
+      "tokens": [0]
+    },
+    "A": {
+      "tokens": []
+    },
+    "B": {
+      "tokens": []
+    },
+    "C": {
+      "tokens": []
+    },
+    "D": {
+      "tokens": []
+    },
+    "DataReceived": {
+      "tokens": []
+    }
+  },
+  "evaluationContext": null
+}
