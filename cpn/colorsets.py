@@ -23,6 +23,15 @@ class IntegerColorSet(ColorSet):
         return f"IntegerColorSet{timed_str}"
 
 
+class RealColorSet(ColorSet):
+    def is_member(self, value: Any) -> bool:
+        return isinstance(value, float)
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        return f"RealColorSet{timed_str}"
+
+
 class StringColorSet(ColorSet):
     def is_member(self, value: Any) -> bool:
         return isinstance(value, str)
@@ -107,6 +116,8 @@ class ColorSetParser:
 
         if type_str == "int":
             return IntegerColorSet(timed=timed)
+        if type_str == "real":
+            return RealColorSet(timed=timed)
         if type_str == "string":
             return StringColorSet(timed=timed)
 
@@ -139,11 +150,9 @@ class ColorSetParser:
 
         # Enumerations are separated by commas, we assume each value is quoted
         # (e.g., 'red', 'green').
-        # Let's split by commas, then strip spaces, and remove quotes.
         values = [v.strip() for v in inner.split(",")]
         parsed_values = []
         for val in values:
-            # Expecting something like 'red' or 'green'
             if len(val) >= 2 and val.startswith("'") and val.endswith("'"):
                 parsed_values.append(val[1:-1])
             else:
@@ -170,6 +179,7 @@ if __name__ == "__main__":
     colset Colors = { 'red', 'green' } timed;
     colset SimpleColors = { 'blue', 'yellow' };
     colset MyInts = int;
+    colset MyReals = real;
     colset MyProduct = product(Colors, MyInts) timed;
     """
 
@@ -184,6 +194,8 @@ if __name__ == "__main__":
     print("SimpleColors.is_member('yellow'):", parsed['SimpleColors'].is_member('yellow'))
     print("MyInts.is_member(42):", parsed['MyInts'].is_member(42))
     print("MyInts.is_member('42'):", parsed['MyInts'].is_member('42'))
+    print("MyReals.is_member(3.14):", parsed['MyReals'].is_member(3.14))
+    print("MyReals.is_member('3.14'):", parsed['MyReals'].is_member('3.14'))
 
     # Product test: product(Colors, MyInts)
     print("MyProduct.is_member(('red', 10)):", parsed['MyProduct'].is_member(('red', 10)))
