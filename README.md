@@ -244,8 +244,3 @@ print("After advancing clock:", marking.global_clock)
 ## Contributing and Feedback
 
 Contributions, bug reports, and feature requests are welcome. Open an issue or submit a pull request to help improve `cpnpy`.
-
----
-
-**License:** MIT or similar (depending on your licensing choice).
-```
