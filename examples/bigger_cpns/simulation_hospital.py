@@ -27,11 +27,6 @@ cpn, marking, context = import_cpn_from_json(json_data)
 # from previous code, we have cpn, marking, and context
 ocel = simulate_cpn_to_ocel(cpn, marking, context)
 
-print("OCEL Events:")
-print(ocel.events)
-print("OCEL Objects:")
-print(ocel.objects)
-print("OCEL Relations:")
-print(ocel.relations)
+print(ocel.get_extended_table())
 
-pm4py.write_ocel2(ocel, "../../prova.xml")
+#pm4py.write_ocel2(ocel, "../../prova.xml")
