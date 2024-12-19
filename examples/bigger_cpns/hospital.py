@@ -5,7 +5,7 @@ from typing import Dict, Any
 from copy import deepcopy
 
 
-json_data = json.load(open("../../files/fairness/hospital.json", "r"))
+json_data = json.load(open("../../files/bigger_cpns/hospital.json", "r"))
 schema = json.load(open("../../files/validation_schema.json", "r"))
 
 # Import the CPN, its initial marking, and the evaluation context from the JSON
