@@ -52,9 +52,16 @@ if t2:
         print("\nMarking after firing second transition:")
         print(marking)
 
-from cpnpy.visualization.visualizer import CPNGraphViz
 
-builder = CPNGraphViz()
-builder.apply(cpn, marking)
-builder.view()
+if True:
+    from cpnpy.analysis.analyzer import StateSpaceAnalyzer
+    sa = StateSpaceAnalyzer(cpn, marking)
+    sa.get_statistics()
+
+if False:
+    from cpnpy.visualization.visualizer import CPNGraphViz
+
+    builder = CPNGraphViz()
+    builder.apply(cpn, marking)
+    builder.view()
 
