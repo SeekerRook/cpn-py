@@ -301,6 +301,23 @@ If the JSON is invalid, `jsonschema` will raise a `jsonschema.exceptions.Validat
 
 ---
 
+## Simulation to an Object-Centric Event Log (OCEL)
+
+In addition to simulating token movements and time advancements, `cpnpy` can also record the simulation trace in an object-centric event log (OCEL) format. This allows for a richer representation of process executions, where events are related to multiple objects of potentially different types, rather than just a single process instance.
+
+The function below demonstrates how to simulate a given CPN from a specified initial marking and store each fired transition as an event in an OCEL object. Each event references the objects involved (i.e., tokens from input and output places) and their associated types, inferred from the places’ color sets. The resulting OCEL can then be analyzed using object-centric process mining techniques.
+
+**Key points of the simulation:**
+- The simulation runs until no transitions are enabled and no further advancement in time is possible.
+- Each fired transition becomes an event in the OCEL.
+- The tokens consumed and produced by firing a transition determine which objects the event references.
+- Objects are typed according to the color sets of the places they originate from or go to.
+- The simulation assigns timestamps and unique identifiers to events and objects.
+- Finally, an `OCEL` object (from `pm4py`) is created, containing three main tables:
+  - `events` with one row per fired transition.
+  - `objects` listing the encountered objects and their types.
+  - `relations` linking events to their related objects.
+
 ---
 
 ## Additional Notes
