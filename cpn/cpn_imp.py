@@ -1,3 +1,4 @@
+import copy
 from collections import Counter
 from typing import List, Optional, Union, Any, Dict
 from cpn.colorsets import *
@@ -15,6 +16,23 @@ class Token:
         if self.timestamp != 0:
             return f"Token({self.value}, t={self.timestamp})"
         return f"Token({self.value})"
+
+    def __copy__(self):
+        # Shallow copy: values assumed to be immutable or just referenced
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.value = self.value
+        result.timestamp = self.timestamp
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        # Deepcopy value (in case it's a complex object)
+        result.value = copy.deepcopy(self.value, memo)
+        result.timestamp = self.timestamp
+        return result
 
 
 class Multiset:
@@ -61,6 +79,21 @@ class Multiset:
         items_str = ", ".join(str(t) for t in self.tokens)
         return f"{{{items_str}}}"
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        # Shallow copy tokens list (but Token objects are referenced)
+        result.tokens = self.tokens[:]
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        # Deepcopy tokens
+        result.tokens = [copy.deepcopy(t, memo) for t in self.tokens]
+        return result
+
 
 # -----------------------------------------------------------------------------------
 # Marking with Global Clock
@@ -72,7 +105,7 @@ class Marking:
 
     def set_tokens(self, place_name: str, tokens: List[Any], timestamps: Optional[List[int]] = None):
         if timestamps is None:
-            timestamps = [0]*len(tokens)
+            timestamps = [0] * len(tokens)
         self._marking[place_name] = Multiset([Token(v, ts) for v, ts in zip(tokens, timestamps)])
 
     def add_tokens(self, place_name: str, token_values: List[Any], timestamp: int = 0):
@@ -97,6 +130,23 @@ class Marking:
         if len(lines) == 1:
             lines.append("  (empty)")
         return "\n".join(lines)
+
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.global_clock = self.global_clock
+        # Shallow copy of marking dict and multiset references
+        result._marking = {k: copy.copy(v) for k, v in self._marking.items()}
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        result.global_clock = self.global_clock
+        # Deepcopy marking dict and multisets
+        result._marking = {k: copy.deepcopy(v, memo) for k, v in self._marking.items()}
+        return result
 
 
 # -----------------------------------------------------------------------------------
@@ -128,6 +178,21 @@ class EvaluationContext:
             return val, delay
         return [val], delay
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        # Shallow copy environment
+        result.env = self.env.copy()
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        # Deepcopy environment
+        result.env = copy.deepcopy(self.env, memo)
+        return result
+
 
 # -----------------------------------------------------------------------------------
 # Place, Transition, Arc, CPN with Time
@@ -140,9 +205,27 @@ class Place:
     def __repr__(self):
         return f"Place(name='{self.name}', colorset={repr(self.colorset)})"
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.name = self.name
+        # Shallow copy the colorset (assuming ColorSet is immutable or already handles deepcopy)
+        result.colorset = self.colorset
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        result.name = copy.deepcopy(self.name, memo)
+        # Deepcopy colorset
+        result.colorset = copy.deepcopy(self.colorset, memo)
+        return result
+
 
 class Transition:
-    def __init__(self, name: str, guard: Optional[str] = None, variables: Optional[List[str]] = None, transition_delay: int = 0):
+    def __init__(self, name: str, guard: Optional[str] = None, variables: Optional[List[str]] = None,
+                 transition_delay: int = 0):
         self.name = name
         self.guard_expr = guard
         self.variables = variables if variables else []
@@ -153,9 +236,28 @@ class Transition:
         vars_str = ", ".join(self.variables) if self.variables else "None"
         return f"Transition(name='{self.name}', guard='{guard_str}', variables=[{vars_str}], delay={self.transition_delay})"
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.name = self.name
+        result.guard_expr = self.guard_expr
+        result.variables = self.variables[:]
+        result.transition_delay = self.transition_delay
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        result.name = copy.deepcopy(self.name, memo)
+        result.guard_expr = copy.deepcopy(self.guard_expr, memo)
+        result.variables = copy.deepcopy(self.variables, memo)
+        result.transition_delay = self.transition_delay
+        return result
+
 
 class Arc:
-    def __init__(self, source: Union[Place, Transition], target: Union[Place, Transition], expression: str):
+    def __init__(self, source: Union['Place', 'Transition'], target: Union['Place', 'Transition'], expression: str):
         self.source = source
         self.target = target
         self.expression = expression
@@ -164,6 +266,23 @@ class Arc:
         src_name = self.source.name if isinstance(self.source, Place) else self.source.name
         tgt_name = self.target.name if isinstance(self.target, Place) else self.target.name
         return f"Arc(source='{src_name}', target='{tgt_name}', expr='{self.expression}')"
+
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.source = self.source  # shallow ref
+        result.target = self.target  # shallow ref
+        result.expression = self.expression
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        result.source = copy.deepcopy(self.source, memo)
+        result.target = copy.deepcopy(self.target, memo)
+        result.expression = copy.deepcopy(self.expression, memo)
+        return result
 
 
 class CPN:
@@ -242,7 +361,8 @@ class CPN:
             place_marking = marking.get_multiset(arc.source.name)
             # Check if we have enough ready tokens (timestamp <= global_clock)
             for val in values:
-                ready_tokens = [tok for tok in place_marking.tokens if tok.value == val and tok.timestamp <= marking.global_clock]
+                ready_tokens = [tok for tok in place_marking.tokens if
+                                tok.value == val and tok.timestamp <= marking.global_clock]
                 if len(ready_tokens) < values.count(val):
                     return False
         return True
@@ -314,7 +434,8 @@ class CPN:
             new_binding = dict(partial_binding)
             new_binding[var] = tok.value
             used_indices.add(i)
-            self._backtrack_all_bindings(variables[1:], token_pool, context, t, marking, new_binding, used_indices, solutions)
+            self._backtrack_all_bindings(variables[1:], token_pool, context, t, marking, new_binding, used_indices,
+                                         solutions)
             used_indices.remove(i)
 
     def advance_global_clock(self, marking: Marking):
@@ -334,6 +455,23 @@ class CPN:
                 f"  Transitions:\n    {transitions_str}\n\n"
                 f"  Arcs:\n    {arcs_str}\n)")
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        # Shallow copy: references to the same place/transition/arc objects
+        result.places = self.places[:]
+        result.transitions = self.transitions[:]
+        result.arcs = self.arcs[:]
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        result.places = copy.deepcopy(self.places, memo)
+        result.transitions = copy.deepcopy(self.transitions, memo)
+        result.arcs = copy.deepcopy(self.arcs, memo)
+        return result
 
 
 # -----------------------------------------------------------------------------------
@@ -353,8 +491,8 @@ if __name__ == "__main__":
     int_set = colorsets["INT"]
     pair_set = colorsets["PAIR"]
 
-    p_int = Place("P_Int", int_set)      # timed place
-    p_pair = Place("P_Pair", pair_set)   # timed place
+    p_int = Place("P_Int", int_set)  # timed place
+    p_pair = Place("P_Pair", pair_set)  # timed place
     t = Transition("T", guard="x > 10", variables=["x"], transition_delay=2)
 
     cpn = CPN()
