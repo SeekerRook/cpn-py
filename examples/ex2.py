@@ -1,5 +1,5 @@
 from cpn.cpn_imp import *
-
+from util import strip_timing
 
 # Example with timed color sets
 cs_definitions = """
@@ -31,14 +31,16 @@ cpn.add_arc(Arc(t, p_pair, "(x, 'hello') @+5"))
 # Create a marking
 marking = Marking()
 marking.set_tokens("P_Int", [5, 12])  # both at timestamp 0
-print(cpn)
-print(marking)
 
 user_code = """
 def double(n):
     return n*2
 """
 context = EvaluationContext(user_code=user_code)
+
+#cpn, marking = strip_timing.strip_timed_information(cpn, marking); t = cpn.get_transition_by_name("T")
+print(cpn)
+print(marking)
 
 # Check enabling
 print("Is T enabled with x=5?", cpn.is_enabled(t, marking, context, binding={"x": 5}))
