@@ -4,7 +4,7 @@ import json
 
 
 # Assuming the JSON is in a file "cpn_definition.json"
-with open("ex3.json", "r") as f:
+with open("../../files/minimal_cpns/ex3.json", "r") as f:
     data = json.load(f)
 
 cpn, marking, context = import_cpn_from_json(data)

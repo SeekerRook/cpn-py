@@ -4,7 +4,7 @@ from cpnpy.cpn.importer import *
 
 
 # Load the JSON specification
-with open("ex5.json", "r") as f:
+with open("../../files/minimal_cpns/ex5.json", "r") as f:
     data = json.load(f)
 
 # Import the CPN, its initial marking, and the evaluation context from the JSON
