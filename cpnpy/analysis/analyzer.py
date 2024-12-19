@@ -1,10 +1,10 @@
 import time
 import networkx as nx
-from typing import Any, Dict, List, Set, Tuple
+from typing import Tuple
 
-from analysis.reachability import build_reachability_graph
-from analysis.scc import build_scc_graph
-from cpn.cpn_imp import *
+from cpnpy.analysis.reachability import build_reachability_graph
+from cpnpy.analysis.scc import build_scc_graph
+from cpnpy.cpn.cpn_imp import *
 
 
 class StateSpaceAnalyzer:

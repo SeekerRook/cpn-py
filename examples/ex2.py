@@ -1,5 +1,5 @@
-from cpn.cpn_imp import *
-from util import strip_timing
+from cpnpy.cpn.cpn_imp import *
+
 
 # Example with timed color sets
 cs_definitions = """

@@ -1,8 +1,7 @@
-from abc import ABC, abstractmethod
-from collections import Counter
-from typing import Any, Dict, List, Optional, Union
 import json
 import os
+from cpnpy.cpn.cpn_imp import *
+
 
 # -----------------------------------------------------------------------------------
 # ColorSets with Timed Support
@@ -140,7 +139,7 @@ class Marking:
 
     def set_tokens(self, place_name: str, tokens: List[Any], timestamps: Optional[List[int]] = None):
         if timestamps is None:
-            timestamps = [0]*len(tokens)
+            timestamps = [0] * len(tokens)
         self._marking[place_name] = Multiset([Token(v, ts) for v, ts in zip(tokens, timestamps)])
 
     def add_tokens(self, place_name: str, token_values: List[Any], timestamp: int = 0):
@@ -288,7 +287,8 @@ class Place:
 
 
 class Transition:
-    def __init__(self, name: str, guard: Optional[str] = None, variables: Optional[List[str]] = None, transition_delay: int = 0):
+    def __init__(self, name: str, guard: Optional[str] = None, variables: Optional[List[str]] = None,
+                 transition_delay: int = 0):
         self.name = name
         self.guard_expr = guard
         self.variables = variables if variables else []
@@ -387,7 +387,8 @@ class CPN:
             values, _ = context.evaluate_arc(arc.expression, binding)
             place_marking = marking.get_multiset(arc.source.name)
             for val in values:
-                ready_tokens = [tok for tok in place_marking.tokens if tok.value == val and tok.timestamp <= marking.global_clock]
+                ready_tokens = [tok for tok in place_marking.tokens if
+                                tok.value == val and tok.timestamp <= marking.global_clock]
                 if len(ready_tokens) < values.count(val):
                     return False
         return True
@@ -406,7 +407,8 @@ class CPN:
         return self._backtrack_binding(variables, token_pool, context, t, marking, {})
 
     def _backtrack_binding(self, variables: List[str], token_pool: List[Any], context: EvaluationContext,
-                           t: Transition, marking: Marking, partial_binding: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+                           t: Transition, marking: Marking, partial_binding: Dict[str, Any]) -> Optional[
+        Dict[str, Any]]:
         if not variables:
             if self._check_enabled_with_binding(t, marking, context, partial_binding):
                 return partial_binding
@@ -483,7 +485,9 @@ def generate_color_set_definitions(cpn: CPN):
 
     return colorset_to_name, name_to_def
 
-def export_cpn_to_json(cpn: CPN, marking: Marking, context: Optional[EvaluationContext], output_json_path: str, output_py_path: Optional[str] = None):
+
+def export_cpn_to_json(cpn: CPN, marking: Marking, context: Optional[EvaluationContext], output_json_path: str,
+                       output_py_path: Optional[str] = None):
     # Generate color set definitions
     cs_to_name, name_to_def = generate_color_set_definitions(cpn)
 

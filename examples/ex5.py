@@ -1,7 +1,7 @@
 import json
-from cpn.cpn_imp import *   # This should import CPN, Marking, Token, etc.
-from cpn.importer import import_cpn_from_json
-from cpn.colorsets import ColorSetParser
+from cpnpy.cpn.cpn_imp import *
+from cpnpy.cpn.importer import *
+
 
 # Load the JSON specification
 with open("ex5.json", "r") as f:

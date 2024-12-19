@@ -1,7 +1,7 @@
 import copy
 from collections import Counter
-from typing import List, Optional, Union, Any, Dict
-from cpn.colorsets import *
+from typing import Optional, Union
+from cpnpy.cpn.colorsets import *
 
 
 # -----------------------------------------------------------------------------------

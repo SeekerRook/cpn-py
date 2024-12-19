@@ -1,4 +1,4 @@
-from cpn.cpn_imp import *
+from cpnpy.cpn.cpn_imp import *
 
 
 cs_definitions = """

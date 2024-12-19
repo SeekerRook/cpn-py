@@ -1,6 +1,5 @@
 import json
-from typing import Dict, Any
-from cpn.cpn_imp import *
+from cpnpy.cpn.cpn_imp import *
 
 
 def import_cpn_from_json(data: Dict[str, Any]) -> (CPN, Marking, EvaluationContext):
@@ -87,7 +86,7 @@ def import_cpn_from_json(data: Dict[str, Any]) -> (CPN, Marking, EvaluationConte
 # Example usage:
 if __name__ == "__main__":
     # Assuming the JSON is in a file "cpn_definition.json"
-    with open("../examples/ex3.json", "r") as f:
+    with open("../../examples/ex3.json", "r") as f:
         data = json.load(f)
 
     cpn, marking, context = import_cpn_from_json(data)

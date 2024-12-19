@@ -1,6 +1,6 @@
 import networkx as nx
-from cpn.cpn_imp import *
-from analysis.reachability import build_reachability_graph
+from cpnpy.analysis.reachability import build_reachability_graph
+from cpnpy.cpn.cpn_imp import *
 
 
 def build_scc_graph(RG: nx.DiGraph) -> nx.DiGraph:

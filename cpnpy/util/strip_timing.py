@@ -1,5 +1,6 @@
 import copy
 
+
 def strip_timed_information(cpn, marking):
     # Deep copy the cpn and marking first
     cpn_copy = copy.deepcopy(cpn)

@@ -1,8 +1,8 @@
 import networkx as nx
-from typing import Dict, Any, Tuple, List, Optional, Set, Callable
+from typing import Tuple, Set, Callable
 from collections import deque
+from cpnpy.cpn.cpn_imp import *
 
-from cpn.cpn_imp import *  # Assumes necessary classes (CPN, Transition, Place, Marking, etc.) are defined.
 
 def equiv_marking_to_key(marking: Marking) -> Tuple[int, Tuple[Tuple[str, Tuple[Any, ...]], ...]]:
     """
@@ -63,11 +63,11 @@ def copy_marking(original: Marking) -> Marking:
 
 
 def build_reachability_graph(
-    cpn: CPN,
-    initial_marking: Marking,
-    context: EvaluationContext,
-    marking_equiv_func: Callable[[Marking], Any] = equiv_marking_to_key,
-    binding_equiv_func: Callable[[Dict[str, Any]], Any] = equiv_binding
+        cpn: CPN,
+        initial_marking: Marking,
+        context: EvaluationContext,
+        marking_equiv_func: Callable[[Marking], Any] = equiv_marking_to_key,
+        binding_equiv_func: Callable[[Dict[str, Any]], Any] = equiv_binding
 ) -> nx.DiGraph:
     """
     Build the reachability graph of the given CPN starting from initial_marking.

@@ -1,5 +1,7 @@
-from cpn.cpn_imp import *
-from cpn.importer import *
+from cpnpy.cpn.cpn_imp import *
+from cpnpy.cpn.importer import *
+import json
+
 
 # Assuming the JSON is in a file "cpn_definition.json"
 with open("ex3.json", "r") as f:
