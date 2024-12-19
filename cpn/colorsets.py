@@ -1,11 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict
-
+from typing import Any, Dict, List
 
 # -----------------------------------------------------------------------------------
 # ColorSets with Timed Support
 # -----------------------------------------------------------------------------------
-
 
 class ColorSet(ABC):
     def __init__(self, timed: bool = False):
@@ -32,6 +30,20 @@ class StringColorSet(ColorSet):
     def __repr__(self):
         timed_str = " timed" if self.timed else ""
         return f"StringColorSet{timed_str}"
+
+
+class EnumeratedColorSet(ColorSet):
+    def __init__(self, values: List[str], timed: bool = False):
+        super().__init__(timed=timed)
+        self.values = values
+
+    def is_member(self, value: Any) -> bool:
+        return value in self.values
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        values_str = ", ".join(repr(v) for v in self.values)
+        return f"EnumeratedColorSet({{{values_str}}}){timed_str}"
 
 
 class ProductColorSet(ColorSet):
@@ -89,6 +101,10 @@ class ColorSetParser:
         self.colorsets[name] = cs
 
     def _parse_type(self, type_str: str, timed: bool) -> ColorSet:
+        # Check for enumerated type: { 'red', 'green', ... }
+        if type_str.startswith("{") and type_str.endswith("}"):
+            return self._parse_enumerated_type(type_str, timed)
+
         if type_str == "int":
             return IntegerColorSet(timed=timed)
         if type_str == "string":
@@ -115,6 +131,26 @@ class ColorSetParser:
 
         raise ValueError(f"Unknown type definition or reference: {type_str}")
 
+    def _parse_enumerated_type(self, type_str: str, timed: bool) -> EnumeratedColorSet:
+        # remove outer braces { ... }
+        inner = type_str[1:-1].strip()
+        if not inner:
+            raise ValueError("Enumerated color set cannot be empty.")
+
+        # Enumerations are separated by commas, we assume each value is quoted
+        # (e.g., 'red', 'green').
+        # Let's split by commas, then strip spaces, and remove quotes.
+        values = [v.strip() for v in inner.split(",")]
+        parsed_values = []
+        for val in values:
+            # Expecting something like 'red' or 'green'
+            if len(val) >= 2 and val.startswith("'") and val.endswith("'"):
+                parsed_values.append(val[1:-1])
+            else:
+                raise ValueError(f"Enumerated values must be quoted strings. Invalid value: {val}")
+
+        return EnumeratedColorSet(parsed_values, timed=timed)
+
     def _find_comma_at_top_level(self, s: str) -> int:
         level = 0
         for i, ch in enumerate(s):
@@ -125,3 +161,30 @@ class ColorSetParser:
             elif ch == ',' and level == 0:
                 return i
         return -1
+
+
+if __name__ == "__main__":
+    parser = ColorSetParser()
+
+    definitions = """
+    colset Colors = { 'red', 'green' } timed;
+    colset SimpleColors = { 'blue', 'yellow' };
+    colset MyInts = int;
+    colset MyProduct = product(Colors, MyInts) timed;
+    """
+
+    parsed = parser.parse_definitions(definitions)
+    for name, cs in parsed.items():
+        print(f"{name} = {cs}")
+
+    # Test membership
+    print("Test membership:")
+    print("Colors.is_member('red'):", parsed['Colors'].is_member('red'))
+    print("Colors.is_member('blue'):", parsed['Colors'].is_member('blue'))
+    print("SimpleColors.is_member('yellow'):", parsed['SimpleColors'].is_member('yellow'))
+    print("MyInts.is_member(42):", parsed['MyInts'].is_member(42))
+    print("MyInts.is_member('42'):", parsed['MyInts'].is_member('42'))
+
+    # Product test: product(Colors, MyInts)
+    print("MyProduct.is_member(('red', 10)):", parsed['MyProduct'].is_member(('red', 10)))
+    print("MyProduct.is_member(('red', 'notint')):", parsed['MyProduct'].is_member(('red', 'notint')))
