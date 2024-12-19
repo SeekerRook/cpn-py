@@ -1,4 +1,6 @@
 from cpnpy.cpn.cpn_imp import *
+from cpnpy.simulation.ocel_simu import simulate_cpn_to_ocel
+from copy import deepcopy
 
 
 # Example with timed color sets
@@ -42,6 +44,10 @@ context = EvaluationContext(user_code=user_code)
 print(cpn)
 print(marking)
 
+# from previous code, we have cpn, marking, and context
+ocel = simulate_cpn_to_ocel(cpn, deepcopy(marking), context)
+print(ocel.get_extended_table())
+
 # Check enabling
 print("Is T enabled with x=5?", cpn.is_enabled(t, marking, context, binding={"x": 5}))
 print("Is T enabled with x=12?", cpn.is_enabled(t, marking, context, binding={"x": 12}))
@@ -57,3 +63,5 @@ print(marking)
 # The produced token has timestamp = global_clock + transition_delay (2) + arc_delay (5) = 7.
 cpn.advance_global_clock(marking)
 print("After advancing global clock:", marking.global_clock)
+
+
