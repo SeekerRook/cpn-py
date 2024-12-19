@@ -1,0 +1,409 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "colorSets": [
+    "colset UnfairnessFactors = { 'gender_bias', 'age_bias', 'race_bias', 'socioeconomic_bias', 'other' };",
+    "colset PatientID = int;",
+    "colset Severity = int;",
+    "colset PatientType = product(product(PatientID, UnfairnessFactors), Severity);"
+  ],
+  "places": [
+    {
+      "name": "Admission",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "PreTriage",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "WaitingRoom",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "TriageQueue",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "ExamRoom",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "DiagnosticLab",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "ReviewArea",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "DecisionPoint",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "HighSeverityTreatment",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "StandardTreatment",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "SocioEconomicCheck",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "DelayedTreatmentQueue",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "TreatmentRoom",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "MonitoringRoom",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "DischargeQueue",
+      "colorSet": "PatientType"
+    },
+    {
+      "name": "Discharged",
+      "colorSet": "PatientType"
+    }
+  ],
+  "transitions": [
+    {
+      "name": "Admit_Patient",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "Admission",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "PreTriage",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Move_To_Triage",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "PreTriage",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "WaitingRoom",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Start_Triage",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "WaitingRoom",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "TriageQueue",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Perform_Triage",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "TriageQueue",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "ExamRoom",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Run_Diagnostics",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "ExamRoom",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "DiagnosticLab",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Analyze_Results",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "DiagnosticLab",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "ReviewArea",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Move_To_DecisionPoint",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "ReviewArea",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "DecisionPoint",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "High_Severity_Path",
+      "variables": ["x"],
+      "guard": "x[2] > 5",
+      "inArcs": [
+        {
+          "place": "DecisionPoint",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "HighSeverityTreatment",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "SocioEconomic_Path",
+      "variables": ["x"],
+      "guard": "x[1] == 'socioeconomic_bias' and x[2] <= 5",
+      "inArcs": [
+        {
+          "place": "DecisionPoint",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "SocioEconomicCheck",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Standard_Path",
+      "variables": ["x"],
+      "guard": "x[2] <= 5 and x[1] != 'socioeconomic_bias'",
+      "inArcs": [
+        {
+          "place": "DecisionPoint",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "StandardTreatment",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "SocioEconomic_Delay",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "SocioEconomicCheck",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "DelayedTreatmentQueue",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Treat_High_Severity_Patient",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "HighSeverityTreatment",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "TreatmentRoom",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Treat_Standard_Patient",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "StandardTreatment",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "TreatmentRoom",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Delayed_Treatment",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "DelayedTreatmentQueue",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "TreatmentRoom",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Monitor_Patient",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "TreatmentRoom",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "MonitoringRoom",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Prepare_Discharge",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "MonitoringRoom",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "DischargeQueue",
+          "expression": "[x]"
+        }
+      ]
+    },
+    {
+      "name": "Discharge_Patient",
+      "variables": ["x"],
+      "inArcs": [
+        {
+          "place": "DischargeQueue",
+          "expression": "[x]"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "Discharged",
+          "expression": "[x]"
+        }
+      ]
+    }
+  ],
+  "initialMarking": {
+    "Admission": {
+      "tokens": [
+        [1, "gender_bias", 3],
+        [2, "socioeconomic_bias", 5],
+        [3, "other", 6],
+        [4, "race_bias", 2],
+        [5, "age_bias", 10]
+      ]
+    },
+    "PreTriage": {
+      "tokens": []
+    },
+    "WaitingRoom": {
+      "tokens": []
+    },
+    "TriageQueue": {
+      "tokens": []
+    },
+    "ExamRoom": {
+      "tokens": []
+    },
+    "DiagnosticLab": {
+      "tokens": []
+    },
+    "ReviewArea": {
+      "tokens": []
+    },
+    "DecisionPoint": {
+      "tokens": []
+    },
+    "HighSeverityTreatment": {
+      "tokens": []
+    },
+    "StandardTreatment": {
+      "tokens": []
+    },
+    "SocioEconomicCheck": {
+      "tokens": []
+    },
+    "DelayedTreatmentQueue": {
+      "tokens": []
+    },
+    "TreatmentRoom": {
+      "tokens": []
+    },
+    "MonitoringRoom": {
+      "tokens": []
+    },
+    "DischargeQueue": {
+      "tokens": []
+    },
+    "Discharged": {
+      "tokens": []
+    }
+  },
+  "evaluationContext": null
+}
