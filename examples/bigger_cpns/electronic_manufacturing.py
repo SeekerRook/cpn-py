@@ -7,7 +7,7 @@ from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
 
-json_data = json.load(open("../../files/bigger_cpns/hospital.json", "r"))
+json_data = json.load(open("../../files/bigger_cpns/electronic_manufacturing.json", "r"))
 schema = json.load(open("../../files/validation_schema.json", "r"))
 
 try:
@@ -19,9 +19,8 @@ except ValidationError as e:
 
 # Import the CPN, its initial marking, and the evaluation context from the JSON
 cpn, marking, context = import_cpn_from_json(json_data)
-
-#print(cpn)
-#print(marking)
+print(cpn)
+print(marking)
 
 from cpnpy.visualization.visualizer import CPNGraphViz
 

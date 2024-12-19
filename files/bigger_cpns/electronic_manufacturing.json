@@ -1,0 +1,197 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "colorSets": [
+    "colset ProductStage = {'raw','componentsAttached','qualityChecked','enclosureFitted','tested','packaged','reworkNeeded'};",
+    "colset PriorityLevel = {'normal','rush'};",
+    "colset Product = product(product(int, ProductStage), PriorityLevel);",
+    "colset MachineType = {'assembly','enclosureFitter','testRig'};",
+    "colset MachineStatus = {'idle','working'};",
+    "colset Machine = product(product(int, MachineType), MachineStatus);",
+    "colset BusyStatus = {'free','engaged'};",
+    "colset Operator = product(product(int,int),BusyStatus);",
+    "colset MaterialType = {'electronicComponents'};",
+    "colset MaterialBatch = product(MaterialType,int);",
+    "colset PackageType = {'standard','specialCase'};",
+    "colset PackagingMaterial = product(PackageType,int);",
+    "colset ProdMachOp = product(product(Product,Machine),Operator);",
+    "colset ProdOperator = product(Product,Operator);"
+  ],
+  "places": [
+    { "name": "P_RawMaterialStock", "colorSet": "MaterialBatch" },
+    { "name": "P_UnprocessedProducts", "colorSet": "Product" },
+    { "name": "P_AssemblingStationQueue", "colorSet": "Product" },
+    { "name": "P_AssemblingStationInUse", "colorSet": "ProdMachOp" },
+    { "name": "P_AvailableMachines", "colorSet": "Machine" },
+    { "name": "P_AvailableOperators", "colorSet": "Operator" },
+    { "name": "P_QAQueue", "colorSet": "Product" },
+    { "name": "P_AvailableInspectors", "colorSet": "Operator" },
+    { "name": "P_QualityCheckInProgress", "colorSet": "ProdOperator" },
+    { "name": "P_ApprovedProducts", "colorSet": "Product" },
+    { "name": "P_EnclosureStationQueue", "colorSet": "Product" },
+    { "name": "P_TestingStationQueue", "colorSet": "Product" },
+    { "name": "P_PackagingQueue", "colorSet": "Product" },
+    { "name": "P_AvailablePackagingMaterials", "colorSet": "PackagingMaterial" },
+    { "name": "P_FinishedGoods", "colorSet": "Product" },
+    { "name": "P_Shipped", "colorSet": "Product" }
+  ],
+  "transitions": [
+    {
+      "name": "T_PrepareMaterials",
+      "variables": ["mat"],
+      "guard": "mat[1]>=10",
+      "inArcs": [
+        { "place": "P_RawMaterialStock", "expression": "[mat]" }
+      ],
+      "outArcs": [
+        { "place": "P_UnprocessedProducts", "expression": "[(101,'raw','normal')]" }
+      ]
+    },
+    {
+      "name": "T_AllocateAssemblyStation",
+      "variables": ["p","m","o"],
+      "guard": "p[1]=='raw' and m[1]=='assembly' and m[2]=='idle' and o[2]=='free' and o[1]>=3",
+      "inArcs": [
+        { "place": "P_UnprocessedProducts", "expression": "[p]" },
+        { "place": "P_AvailableMachines", "expression": "[m]" },
+        { "place": "P_AvailableOperators", "expression": "[o]" }
+      ],
+      "outArcs": [
+        { "place": "P_AssemblingStationInUse", "expression": "[((p[0],p[1],p[2]),(m[0],m[1],'working'),(o[0],o[1],'engaged'))]" }
+      ]
+    },
+    {
+      "name": "T_AssembleComponents",
+      "variables": ["x"],
+      "guard": "x[0][1]=='raw' and x[1][2]=='working' and x[2][2]=='engaged'",
+      "inArcs": [
+        { "place": "P_AssemblingStationInUse", "expression": "[x]" }
+      ],
+      "outArcs": [
+        { "place": "P_QAQueue", "expression": "[(x[0][0],'componentsAttached',x[0][2])]" },
+        { "place": "P_AvailableMachines", "expression": "[(x[1][0],x[1][1],'idle')]" },
+        { "place": "P_AvailableOperators", "expression": "[(x[2][0],x[2][1],'free')]" }
+      ]
+    },
+    {
+      "name": "T_AllocateInspector",
+      "variables": ["p","o"],
+      "guard": "p[1]=='componentsAttached' and o[2]=='free' and o[1]>=4",
+      "inArcs": [
+        { "place": "P_QAQueue", "expression": "[p]" },
+        { "place": "P_AvailableInspectors", "expression": "[o]" }
+      ],
+      "outArcs": [
+        { "place": "P_QualityCheckInProgress", "expression": "[((p[0],p[1],p[2]),(o[0],o[1],'engaged'))]" }
+      ]
+    },
+    {
+      "name": "T_QualityInspect",
+      "variables": ["y"],
+      "guard": "True",
+      "inArcs": [
+        { "place": "P_QualityCheckInProgress", "expression": "[y]" }
+      ],
+      "outArcs": [
+        { "place": "P_ApprovedProducts", "expression": "[(y[0][0],'qualityChecked',y[0][2])]" },
+        { "place": "P_AvailableInspectors", "expression": "[(y[1][0],y[1][1],'free')]" }
+      ]
+    },
+    {
+      "name": "T_EnclosureFitting",
+      "variables": ["p","m","o"],
+      "guard": "p[1]=='qualityChecked' and m[1]=='enclosureFitter' and m[2]=='idle' and o[2]=='free' and o[1]>=3",
+      "inArcs": [
+        { "place": "P_ApprovedProducts", "expression": "[p]" },
+        { "place": "P_AvailableMachines", "expression": "[m]" },
+        { "place": "P_AvailableOperators", "expression": "[o]" }
+      ],
+      "outArcs": [
+        { "place": "P_TestingStationQueue", "expression": "[(p[0],'enclosureFitted',p[2])]" },
+        { "place": "P_AvailableMachines", "expression": "[(m[0],m[1],'idle')]" },
+        { "place": "P_AvailableOperators", "expression": "[(o[0],o[1],'free')]" }
+      ]
+    },
+    {
+      "name": "T_FinalTesting",
+      "variables": ["p","m","o"],
+      "guard": "p[1]=='enclosureFitted' and m[1]=='testRig' and m[2]=='idle' and o[2]=='free' and o[1]>=4",
+      "inArcs": [
+        { "place": "P_TestingStationQueue", "expression": "[p]" },
+        { "place": "P_AvailableMachines", "expression": "[m]" },
+        { "place": "P_AvailableOperators", "expression": "[o]" }
+      ],
+      "outArcs": [
+        { "place": "P_PackagingQueue", "expression": "[(p[0],'tested',p[2])]" },
+        { "place": "P_AvailableMachines", "expression": "[(m[0],m[1],'idle')]" },
+        { "place": "P_AvailableOperators", "expression": "[(o[0],o[1],'free')]" }
+      ]
+    },
+    {
+      "name": "T_AllocatePackagingMaterials",
+      "variables": ["p","pm"],
+      "guard": "p[1]=='tested' and pm[1]>0",
+      "inArcs": [
+        { "place": "P_PackagingQueue", "expression": "[p]" },
+        { "place": "P_AvailablePackagingMaterials", "expression": "[pm]" }
+      ],
+      "outArcs": [
+        { "place": "P_FinishedGoods", "expression": "[(p[0],'packaged',p[2])]" },
+        { "place": "P_AvailablePackagingMaterials", "expression": "[(pm[0],pm[1]-1)]" }
+      ]
+    },
+    {
+      "name": "T_ShipmentDispatch",
+      "variables": ["p"],
+      "guard": "p[1]=='packaged'",
+      "inArcs": [
+        { "place": "P_FinishedGoods", "expression": "[p]" }
+      ],
+      "outArcs": [
+        { "place": "P_Shipped", "expression": "[p]" }
+      ]
+    }
+  ],
+  "initialMarking": {
+    "P_RawMaterialStock": {
+      "tokens": [
+        ["electronicComponents",50]
+      ]
+    },
+    "P_UnprocessedProducts": { "tokens": [] },
+    "P_AssemblingStationQueue": { "tokens": [] },
+    "P_AssemblingStationInUse": { "tokens": [] },
+    "P_AvailableMachines": {
+      "tokens": [
+        [1,"assembly","idle"],
+        [2,"enclosureFitter","idle"],
+        [3,"testRig","idle"]
+      ]
+    },
+    "P_AvailableOperators": {
+      "tokens": [
+        [1,5,"free"],
+        [2,3,"free"]
+      ]
+    },
+    "P_QAQueue": { "tokens": [] },
+    "P_AvailableInspectors": {
+      "tokens": [
+        [3,4,"free"]
+      ]
+    },
+    "P_QualityCheckInProgress": { "tokens": [] },
+    "P_ApprovedProducts": { "tokens": [] },
+    "P_EnclosureStationQueue": { "tokens": [] },
+    "P_TestingStationQueue": { "tokens": [] },
+    "P_PackagingQueue": { "tokens": [] },
+    "P_AvailablePackagingMaterials": {
+      "tokens": [
+        ["standard",10],
+        ["specialCase",2]
+      ]
+    },
+    "P_FinishedGoods": { "tokens": [] },
+    "P_Shipped": { "tokens": [] }
+  },
+  "evaluationContext": null
+}
