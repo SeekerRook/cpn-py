@@ -12,6 +12,19 @@ with open(os.path.join(here, "cpnpy", "meta.py"), "r", encoding="utf-8") as f:
 with io.open("README.md", "r", encoding="utf-8") as f:
     long_description = f.read()
 
+
+# Read requirements from requirements.txt
+def load_requirements(filename):
+    with open(os.path.join(here, filename), "r", encoding="utf-8") as f:
+        return [
+            line.strip()
+            for line in f
+            if line.strip() and not line.startswith('#')
+        ]
+
+
+install_requires = load_requirements("requirements.txt")
+
 setup(
     name=meta["__title__"],
     version=meta["__version__"],
@@ -24,10 +37,7 @@ setup(
     license=meta["__license__"],
     packages=find_packages(exclude=["tests*", "examples*", "extra*"]),
     python_requires=">=3.6",
-    install_requires=[
-        # Add runtime dependencies here, for example:
-        # "some_dependency>=1.0.0"
-    ],
+    install_requires=install_requires,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
