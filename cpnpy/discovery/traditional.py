@@ -66,6 +66,11 @@ def apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None):
             if str(eval) != "True":
                 trans_guards[trans.name] = str(eval)
 
+    if trans_guards:
+        #print(trans_guards)
+        #input()
+        pass
+
     original_log_cases_in_im = parameters.get("original_log_cases_in_im", len(trans_guards) > 0)
 
     for trans in net.transitions:
