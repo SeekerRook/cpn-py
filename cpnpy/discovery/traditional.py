@@ -19,20 +19,26 @@ def last_non_null(series):
         return None  # or np.nan
 
 
-def apply(log: EventLog, pro_disc_alg=pm4py.discover_petri_net_inductive, parameters: Optional[Dict[str, Any]] = None):
+def apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None):
     if parameters is None:
         parameters = {}
 
+    num_simulated_cases = parameters.get("num_simulated_cases", 1)
+    pro_disc_alg = parameters.get("pro_disc_alg", pm4py.discover_petri_net_inductive)
     original_log_cases_in_im = parameters.get("original_log_cases_in_im", False)
     original_case_attributes = parameters.get("original_case_attributes", {"case:concept:name"})
-    num_simulated_cases = parameters.get("num_simulated_cases", 1)
 
     log = pm4py.convert_to_dataframe(log)
 
+    # applies a process discovery algorithm in pm4py, discovering an accepting Petri net from a traditional event log
     net, im, fm = pro_disc_alg(log, parameters)
+    # discovers a stochastic map, associating each transition of the original accepting Petri net with a stochastic
+    # variable indicating the delay
     stochastic_map = replay.get_map_from_log_and_net(log, net, im, fm)
+    # transforms the stochastic variables inside the map into arc delayed in the notation used for cpnpy.
     stochastic_map = rv_to_stri.transform_transition_dict(stochastic_map)
 
+    # create a single color set (representing the case level attributes)
     parser = ColorSetParser()
     c = parser.parse_definitions("colset C = dict timed;")["C"]
 
