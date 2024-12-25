@@ -1,4 +1,5 @@
 import pm4py
+from frozendict import frozendict
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.petri_net.obj import PetriNet
 from pm4py.algo.simulation.montecarlo.utils import replay
@@ -41,7 +42,7 @@ def apply(log: EventLog, pro_disc_alg=pm4py.discover_petri_net_inductive, parame
 
     marking = Marking()
     for p in im:
-        marking.set_tokens(dict_places[p.name].name, [frozenset()])
+        marking.set_tokens(dict_places[p.name].name, [frozendict({})])
 
     code = """
 from scipy.stats import norm, uniform, expon, lognorm, gamma
