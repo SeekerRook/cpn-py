@@ -1,6 +1,8 @@
 import pm4py
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.petri_net.obj import PetriNet
+from pm4py.algo.simulation.montecarlo.utils import replay
+from cpnpy.util import rv_to_stri
 from cpnpy.cpn.cpn_imp import *
 
 
@@ -9,8 +11,11 @@ def apply(log: EventLog, pro_disc_alg=pm4py.discover_petri_net_inductive, parame
         parameters = {}
 
     net, im, fm = pro_disc_alg(log, parameters)
+    stochastic_map = replay.get_map_from_log_and_net(log, net, im, fm)
+    stochastic_map = rv_to_stri.transform_transition_dict(stochastic_map)
+
     parser = ColorSetParser()
-    c = parser.parse_definitions("colset C = dict;")["C"]
+    c = parser.parse_definitions("colset C = dict timed;")["C"]
 
     cpn = CPN()
     dict_places = dict()
@@ -30,7 +35,9 @@ def apply(log: EventLog, pro_disc_alg=pm4py.discover_petri_net_inductive, parame
         if isinstance(arc.source, PetriNet.Place):
             cpn.add_arc(Arc(dict_places[arc.source.name], dict_transitions[arc.target.name], "C"))
         else:
-            cpn.add_arc(Arc(dict_transitions[arc.source.name], dict_places[arc.target.name], "C"))
+            trans = arc.source
+
+            cpn.add_arc(Arc(dict_transitions[trans.name], dict_places[arc.target.name], "C"+stochastic_map[trans]))
 
     marking = Marking()
     for p in im:
