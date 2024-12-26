@@ -373,6 +373,114 @@ By default, this approach uses the inductive miner algorithm (from `pm4py`) to d
 
 ---
 
+## State Space Analysis with `StateSpaceAnalyzer`
+
+`cpnpy` provides a built-in `StateSpaceAnalyzer` that can construct and analyze the *reachability graph (RG)* and *strongly connected components (SCC)* graph of a given CPN. It extracts valuable properties like min/max tokens in each place, dead markings, liveness of transitions, and more.
+
+**Usage**
+
+```python
+from cpnpy.analysis.state_space_analyzer import StateSpaceAnalyzer
+from cpnpy.cpn.cpn_imp import CPN, Marking, EvaluationContext
+
+# Define a CPN and marking (possibly with timed places, transitions, etc.)
+cpn = CPN()
+# ... add places, transitions, arcs ...
+
+marking = Marking()
+# ... set initial tokens ...
+
+# Create an evaluation context (optional, if you have custom functions or distributions)
+context = EvaluationContext(user_code="""
+def my_function(x):
+    return x + 1
+""")
+
+# Build the analyzer
+analyzer = StateSpaceAnalyzer(cpn, marking, context)
+
+# Compute and retrieve summary statistics
+report = analyzer.summarize()
+
+print("=== State Space Report ===")
+for key, val in report.items():
+    print(f"{key}: {val}")
+```
+
+### Internally, the `StateSpaceAnalyzer` does the following:
+
+1. **Reachability Graph Construction:**  
+   Uses `build_reachability_graph` to explore all possible states (markings) from the initial marking, applying transitions and storing reached states as nodes in a directed graph.
+
+2. **Strongly Connected Components (SCC) Graph:**  
+   Once the RG is built, `build_scc_graph` is used to identify SCCs, which can reveal looping behaviors or terminal states.
+
+3. **Properties and Methods:**
+   - **`get_statistics()`**: Returns basic metrics about the RG (number of nodes, arcs) and the SCC graph.
+   - **`is_reachable(from_node, to_node)`**: Checks if there is a path in the RG from one marking (node) to another.
+   - **`get_place_bounds()`**: Provides the minimum and maximum token counts observed for each place across all reachable states.
+   - **`get_place_multiset_bounds()`**: Tracks the min/max count of each distinct token value per place.
+   - **`list_home_markings()`**: Identifies *home markings*, or states that appear in a unique terminal SCC.
+   - **`list_dead_markings()`**: Lists markings with no enabled transitions.
+   - **`list_dead_transitions()`**: Transitions that never enable in the entire state space.
+   - **`list_live_transitions()`**: (Heuristic) Transitions that appear in all terminal SCCs, indicating they remain enabled in the “end” states.
+   - **`list_impartial_transitions()`**: (Heuristic) Transitions that might occur infinitely often in all infinite occurrence sequences.
+   - **`summarize()`**: Provides a combined dictionary of the above analyses.
+
+### Example: Building and Analyzing a State Space
+
+```python
+from cpnpy.cpn.colorsets import ColorSetParser
+from cpnpy.cpn.cpn_imp import CPN, Place, Transition, Arc, Marking, EvaluationContext
+from cpnpy.analysis.analyzer import StateSpaceAnalyzer
+
+# Define color sets
+cs_definitions = """
+colset INT = int timed;
+colset STRING = string;
+colset PAIR = product(INT, STRING) timed;
+"""
+parser = ColorSetParser()
+colorsets = parser.parse_definitions(cs_definitions)
+int_set = colorsets["INT"]
+pair_set = colorsets["PAIR"]
+
+# Create a simple CPN
+p_int = Place("P_Int", int_set)
+p_pair = Place("P_Pair", pair_set)
+t = Transition("T", guard="x > 10", variables=["x"], transition_delay=2)
+
+cpn = CPN()
+cpn.add_place(p_int)
+cpn.add_place(p_pair)
+cpn.add_transition(t)
+cpn.add_arc(Arc(p_int, t, "x"))
+cpn.add_arc(Arc(t, p_pair, "(x, 'hello') @+5"))
+
+# Create a marking
+marking = Marking()
+marking.set_tokens("P_Int", [5, 12])
+
+# Define any custom logic if needed
+user_code = """
+def double(n):
+    return n*2
+"""
+context = EvaluationContext(user_code=user_code)
+
+# Analyze state space
+analyzer = StateSpaceAnalyzer(cpn, marking, context)
+report = analyzer.summarize()
+
+print("=== State Space Analysis Report ===")
+for key, val in report.items():
+    print(f"{key}: {val}")
+```
+
+This approach helps you *exhaustively* understand your CPN’s behavior, including potential deadlocks, live transitions, and bounds on token populations.
+
+---
+
 ## Additional Notes
 
 - **Bindings and Guard Evaluation:** Guards and arc expressions are Python code snippets evaluated under a user-defined `EvaluationContext`. This allows integrating custom logic (functions, constants) into your CPN model.
