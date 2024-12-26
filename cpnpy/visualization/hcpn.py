@@ -18,7 +18,7 @@ class HCPNGraphViz:
     - Places and transitions are named with "ModuleName_PlaceName" or
       "ModuleName_TransitionName" for uniqueness in the overall diagram.
     - We draw dashed arcs **between** a parent's substitution transition
-      and all of the child's **substitution transitions**, visually chaining
+      and all transitions in the child's module, visually chaining
       the hierarchy (instead of linking to the entire cluster).
     """
 
@@ -145,8 +145,7 @@ class HCPNGraphViz:
 
             self.graph.subgraph(sub)
 
-        # 2) Draw dashed arcs from parent's substitution transition -> child's substitution transitions
-        #    to highlight how the hierarchy is chained at the transition level.
+        # 2) Draw dashed arcs from parent's substitution transition -> child's transitions
         for (parent_mod, parent_trans), child_mod in hcpn.substitutions.items():
 
             # Parent sub-transition node (in parent's module)
@@ -154,22 +153,18 @@ class HCPNGraphViz:
             if not parent_node_id:
                 continue  # can't draw an edge if the node wasn't found
 
-            # In the child's module, look for transitions that are themselves substitutions
-            # or simply all transitions if you want to show the chaining differently.
+            # Instead of linking only to the child's *substitution* transitions,
+            # link to ALL transitions in the child's module:
             child_cpn = hcpn.modules[child_mod]
             for t in child_cpn.transitions:
-                # If you only want to chain to the child's "substitution transitions",
-                # check if (child_mod, t.name) is also in hcpn.substitutions.
-                # If you want to link to ALL transitions, remove this check.
-                if (child_mod, t.name) in hcpn.substitutions:
-                    child_node_id = self.node_id_trans.get((child_mod, t.name))
-                    if child_node_id:
-                        self.graph.edge(
-                            parent_node_id,
-                            child_node_id,
-                            style="dashed",
-                            label="(sub->sub)"
-                        )
+                child_node_id = self.node_id_trans.get((child_mod, t.name))
+                if child_node_id:
+                    self.graph.edge(
+                        parent_node_id,
+                        child_node_id,
+                        style="dashed",
+                        label="(sub->child)"
+                    )
 
         return self
 
@@ -193,6 +188,7 @@ class HCPNGraphViz:
         if os.path.abspath(final_path) != os.path.abspath(out_path):
             os.rename(out_path, final_path)
         return final_path
+
 
 # ------------------------------------------------------------------------
 # Example Usage
@@ -295,7 +291,7 @@ if __name__ == "__main__":
         "D": marking_D
     }
 
-    # Visualize the entire HCPN: parent's sub transition -> child's sub transitions
+    # Visualize the entire HCPN: parent's sub transition -> child's transitions
     viz = HCPNGraphViz().apply(hcpn, markings_dict, format="pdf")
 
     # View the generated PDF (uncomment if you want to open a viewer)
