@@ -1,4 +1,3 @@
-```markdown
 # Hierarchical Petri Nets (HCPNs) in `cpnpy`
 
 Hierarchical Petri Nets (HPNs) or Hierarchical Colored Petri Nets (HCPNs) extend traditional Petri nets (or Colored Petri Nets, CPNs) with **hierarchical abstraction**. In a Hierarchical Petri Net, a transition can be replaced (or “substituted”) by another entire (sub)Petri net. This allows modeling complex, multi-level systems more cleanly by breaking them into modules.
