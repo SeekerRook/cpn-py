@@ -67,7 +67,7 @@ You can also imagine an extension (not shown here) for:
 Below is a simplified snippet (adapted from the code in [`hcpn_imp.py`](./cpnpy/hcpn/hcpn_imp.py)):
 
 ```python
-from cpnpy.cpn.cpn_imp import CPN, Place, Transition, Arc, Marking
+from cpnpy.cpn.cpn_imp import *
 from cpnpy.hcpn.hcpn_imp import HCPN
 
 # Suppose we have two modules: a parent (A) and a child (B).
