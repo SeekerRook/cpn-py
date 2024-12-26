@@ -1,7 +1,3 @@
-Below is a **suggested markdown document** (for example, you could name it `HCPN_README.md`) that explains **Hierarchical Petri Nets** and their visualization in the context of `cpnpy`. Feel free to adapt or expand it according to your needs.
-
----
-
 ```markdown
 # Hierarchical Petri Nets (HCPNs) in `cpnpy`
 
