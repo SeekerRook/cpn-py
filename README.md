@@ -320,6 +320,59 @@ The function below demonstrates how to simulate a given CPN from a specified ini
 
 ---
 
+## Discovery from Event Logs with `cpnpy.discovery.traditional.apply(...)`
+
+You can automatically create a Colored Petri Net (CPN) from a traditional event log by calling the `apply` function in `cpnpy.discovery.traditional`. This function:
+
+1. Discovers an accepting Petri net (and its initial and final markings) from the provided event log.
+2. Optionally applies decision mining to discover guard expressions on transitions.
+3. Builds a CPN, associating each place with a color set and each transition with optional guards and stochastic timing.
+4. Populates an initial marking with a configurable number of cases (tokens), optionally drawn from real cases in the original log to preserve their attributes.
+5. Returns the resulting `CPN`, an initial `Marking`, and an `EvaluationContext` for handling stochastic distributions or custom Python functions.
+
+**Function Signature**  
+```python
+cpn, marking, context = cpnpy.discovery.traditional.apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None)
+```
+
+**Parameters**
+- **log** (`pm4py.objects.log.obj.EventLog`): The input event log to be converted into a colored Petri net.
+- **parameters** (`Dict[str, Any]`, *optional*): A dictionary of configuration parameters:
+  - `num_simulated_cases` (`int`): Number of initial tokens (cases) placed in the initial marking (default: 1).
+  - `pro_disc_alg` (`Callable`): The process discovery method used to derive the Petri net from the event log (default: `pm4py.discover_petri_net_inductive`).
+  - `original_case_attributes` (`Set[str]`): A set of attributes that will be assigned to each token (e.g., `{"case:concept:name"}`).
+  - `enable_guards_discovery` (`bool`): If `True`, decision mining is used to discover guard expressions that constrain transitions (default: `False`).
+  - `original_log_cases_in_im` (`bool`): If `True`, real case attributes from the log are used to populate the initial marking. Otherwise, artificial cases are created (default: `True` if any guard is discovered, otherwise `False`).
+
+**Returns**
+- **cpn** (`cpnpy.cpn.cpn_imp.CPN`): The constructed Colored Petri Net with places, transitions, and arcs.
+- **marking** (`cpnpy.cpn.cpn_imp.Marking`): The initial marking, containing the configured number of tokens (cases) with their attributes.
+- **context** (`cpnpy.cpn.cpn_imp.EvaluationContext`): An evaluation context enabling stochastic distribution evaluation and custom Python functions.
+
+**Example Usage**
+```python
+from pm4py.objects.log.importer.xes import importer as xes_importer
+from cpnpy.discovery.traditional import apply
+from cpnpy.cpn.cpn_imp import CPN, Marking, EvaluationContext
+
+# Import an event log using PM4Py
+log = xes_importer.apply("my_event_log.xes")
+
+# Run discovery with guard mining enabled
+cpn, marking, context = apply(log, parameters={
+    "num_simulated_cases": 5,
+    "enable_guards_discovery": True
+})
+
+print("Constructed CPN:", cpn)
+print("Initial Marking:", marking)
+print("Evaluation Context:", context)
+```
+
+By default, this approach uses the inductive miner algorithm (from `pm4py`) to discover a Petri net, optionally adds guards discovered via decision mining, and then constructs a CPN with an initial marking containing real or artificial case tokens.
+
+---
+
 ## Additional Notes
 
 - **Bindings and Guard Evaluation:** Guards and arc expressions are Python code snippets evaluated under a user-defined `EvaluationContext`. This allows integrating custom logic (functions, constants) into your CPN model.
