@@ -1,3 +1,5 @@
+import random
+
 import pm4py
 from frozendict import frozendict
 from pm4py.objects.log.obj import EventLog
@@ -100,7 +102,9 @@ def apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None):
     marking = Marking()
     for p in im:
         if original_log_cases_in_im:
-            result_dict = log.groupby("case:concept:name").agg(last_non_null).to_dict(orient='index')
+            all_cases = set(log["case:concept:name"].unique())
+            all_cases = set(random.sample(all_cases, min(len(all_cases), num_simulated_cases)))
+            result_dict = log[log["case:concept:name"].isin(all_cases)].groupby("case:concept:name").agg(last_non_null).to_dict(orient='index')
 
             lst = []
             for c, vv in result_dict.items():
