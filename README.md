@@ -380,7 +380,7 @@ By default, this approach uses the inductive miner algorithm (from `pm4py`) to d
 **Usage**
 
 ```python
-from cpnpy.analysis.state_space_analyzer import StateSpaceAnalyzer
+from cpnpy.analysis.analyzer import StateSpaceAnalyzer
 from cpnpy.cpn.cpn_imp import CPN, Marking, EvaluationContext
 
 # Define a CPN and marking (possibly with timed places, transitions, etc.)
