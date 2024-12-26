@@ -481,6 +481,30 @@ This approach helps you *exhaustively* understand your CPN’s behavior, includi
 
 ---
 
+Below is an example **summary section** you can place in `README.md`. It highlights the main points about **Hierarchical Petri Nets** (HCPNs) and references a separate file (e.g., `docs_HCPN.md`) for detailed information. This summary contains **no code** and is suitable for a high-level overview:
+
+---
+
+### Hierarchical Petri Nets (HCPNs)
+
+**Hierarchical Petri Nets** (or **Hierarchical Colored Petri Nets**, HCPNs) extend standard CPNs by allowing **substitution transitions**. A substitution transition in a “parent” module references another entire Petri net (the “child” or **submodule**), enabling multi-level, modular process modeling. 
+
+1. **Modules:**  
+   Each component or sub-process is defined as its own CPN, making the overall model more **scalable** and **reusable**.
+
+2. **Substitution Transitions:**  
+   Instead of firing tokens directly, these special transitions delegate token flow to another CPN. This allows nesting sub-processes inside higher-level transitions.
+
+3. **Fusion Sets (Optional):**  
+   Certain places across modules can be *fused* together, sharing the same marking. This mechanism simplifies situations where multiple modules must access the same data or resources.
+
+4. **Visualization:**  
+   HCPNs can be rendered with a specialized **Graphviz** visualizer, illustrating each module as a separate subgraph, highlighting substitution transitions and linking them to child modules with dashed edges.
+
+To learn more about defining, structuring, and visualizing hierarchical nets in `cpnpy`, see **[docs_HCPN.md](docs_HCPN.md)** for a comprehensive guide.
+
+---
+
 ## Additional Notes
 
 - **Bindings and Guard Evaluation:** Guards and arc expressions are Python code snippets evaluated under a user-defined `EvaluationContext`. This allows integrating custom logic (functions, constants) into your CPN model.
