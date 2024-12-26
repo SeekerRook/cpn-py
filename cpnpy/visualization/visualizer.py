@@ -18,7 +18,7 @@ def format_token(tok, token_max_len=200):
     # HTML-escape the truncated string
     escaped_value = html.escape(raw_value_str)
     # Escape backslashes and newlines
-    escaped_value = escaped_value.replace("\\", "\\\\").replace("\n", "\\n")
+    #escaped_value = escaped_value.replace("\\", "\\\\").replace("\n", "\\n")
 
     # Append timestamp if present
     if tok.timestamp != 0:
@@ -35,7 +35,8 @@ def summarize_label(full_label: str, max_len: int = 10000) -> str:
     """
     if len(full_label) > max_len:
         full_label = full_label[:max_len] + "...(truncated)"
-    return full_label.replace("\\", "\\\\").replace("\n", "\\n")
+    return full_label
+    #.replace("\\", "\\\\").replace("\n", "\\n")
 
 
 class CPNGraphViz:
