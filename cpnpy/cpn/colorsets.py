@@ -84,6 +84,21 @@ class ProductColorSet(ColorSet):
         return f"{name_str}ProductColorSet({repr(self.cs1)}, {repr(self.cs2)}){timed_str}"
 
 
+class DictionaryColorSet(ColorSet):
+    """
+    A color set that checks membership for Python dictionaries.
+    Modify if you specifically want 'frozenset'-like behavior
+    or further constraints on keys/values.
+    """
+    def is_member(self, value: Any) -> bool:
+        return isinstance(value, dict)
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}DictionaryColorSet{timed_str}"
+
+
 # -----------------------------------------------------------------------------------
 # ColorSetParser with Timed Support
 # -----------------------------------------------------------------------------------
@@ -134,6 +149,8 @@ class ColorSetParser:
             return RealColorSet(timed=timed)
         if type_str == "string":
             return StringColorSet(timed=timed)
+        if type_str == "dict":
+            return DictionaryColorSet(timed=timed)
 
         if type_str.startswith("product(") and type_str.endswith(")"):
             inner = type_str[len("product("):-1].strip()
@@ -147,6 +164,7 @@ class ColorSetParser:
             cs2 = self._parse_type(type2_str, False)
             return ProductColorSet(cs1, cs2, timed=timed)
 
+        # If it's referencing a previously-defined colorset
         if type_str in self.colorsets:
             base_cs = self.colorsets[type_str]
             # If current definition is timed, ensure the base is also timed
@@ -192,6 +210,7 @@ if __name__ == "__main__":
     colset SimpleColors = { 'blue', 'yellow' };
     colset MyInts = int;
     colset MyReals = real;
+    colset MyDict = dict;
     colset MyProduct = product(Colors, MyInts) timed;
     """
 
@@ -200,7 +219,7 @@ if __name__ == "__main__":
         print(f"{name} = {cs}")
 
     # Test membership
-    print("Test membership:")
+    print("\nTest membership:")
     print("Colors.is_member('red'):", parsed['Colors'].is_member('red'))
     print("Colors.is_member('blue'):", parsed['Colors'].is_member('blue'))
     print("SimpleColors.is_member('yellow'):", parsed['SimpleColors'].is_member('yellow'))
@@ -208,6 +227,10 @@ if __name__ == "__main__":
     print("MyInts.is_member('42'):", parsed['MyInts'].is_member('42'))
     print("MyReals.is_member(3.14):", parsed['MyReals'].is_member(3.14))
     print("MyReals.is_member('3.14'):", parsed['MyReals'].is_member('3.14'))
+
+    # Dictionary test: dict
+    print("MyDict.is_member({'key': 'value'}):", parsed['MyDict'].is_member({'key': 'value'}))
+    print("MyDict.is_member(42):", parsed['MyDict'].is_member(42))
 
     # Product test: product(Colors, MyInts)
     print("MyProduct.is_member(('red', 10)):", parsed['MyProduct'].is_member(('red', 10)))

@@ -1,6 +1,7 @@
 from cpnpy.cpn.cpn_imp import *
 import copy
 import pandas as pd
+import random
 from pm4py.objects.ocel.obj import OCEL
 
 
@@ -32,7 +33,9 @@ def simulate_cpn_to_ocel(cpn: CPN, initial_marking: Marking, context: Evaluation
     while True:
         enabled_transitions = []
         # Check which transitions are enabled
-        for t in cpn.transitions:
+        transitions = list(cpn.transitions)
+        random.shuffle(transitions)
+        for t in transitions:
             if cpn.is_enabled(t, marking, context):
                 enabled_transitions.append(t)
 

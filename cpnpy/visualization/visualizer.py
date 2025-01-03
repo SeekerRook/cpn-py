@@ -5,6 +5,40 @@ import os
 from cpnpy.cpn.cpn_imp import *
 
 
+def format_token(tok, token_max_len=200):
+    """
+    Produce a short, escaped summary of a single token (value + optional timestamp).
+    """
+    # Convert token value to string
+    raw_value_str = str(tok.value)
+    # Truncate if very long
+    if len(raw_value_str) > token_max_len:
+        raw_value_str = raw_value_str[:token_max_len] + "...(truncated)"
+
+    # HTML-escape the truncated string
+    escaped_value = html.escape(raw_value_str)
+    # Escape backslashes and newlines
+    #escaped_value = escaped_value.replace("\\", "\\\\").replace("\n", "\\n")
+
+    # Append timestamp if present
+    if tok.timestamp != 0:
+        return f"{escaped_value}@{tok.timestamp}"
+    else:
+        return escaped_value
+
+
+def summarize_label(full_label: str, max_len: int = 10000) -> str:
+    """
+    If the label is longer than max_len, truncate it safely.
+    Also ensure it doesn't contain unescaped newlines/backslashes that
+    might break Graphviz.
+    """
+    if len(full_label) > max_len:
+        full_label = full_label[:max_len] + "...(truncated)"
+    return full_label
+    #.replace("\\", "\\\\").replace("\n", "\\n")
+
+
 class CPNGraphViz:
     def __init__(self):
         self.graph = None
@@ -25,53 +59,75 @@ class CPNGraphViz:
 
         # Add Places
         for place in cpn.places:
-            # Retrieve tokens from marking
             ms = marking.get_multiset(place.name)
-            # Escape tokens for safety
             token_str_list = []
-            for tok in ms.tokens:
-                val_repr = html.escape(str(tok.value))
-                if tok.timestamp != 0:
-                    token_str_list.append(f"{val_repr}@{tok.timestamp}")
-                else:
-                    token_str_list.append(val_repr)
-            token_str = ", ".join(token_str_list)
 
-            # Construct label
+            # Format each token in a safe, shortened way
+            for tok in ms.tokens:
+                token_str_list.append(format_token(tok))
+
             if token_str_list:
-                label = f"{place.name}\\nTokens: {token_str}"
+                label = f"{place.name}\\nTokens: {', '.join(token_str_list)}"
             else:
                 label = f"{place.name}\\n(No tokens)"
 
-            self.graph.node(place.name,
-                            label=label,
-                            shape="ellipse",
-                            style="filled",
-                            fillcolor="#e0e0f0")
+            # Final summarize/truncation to prevent very long label
+            label = summarize_label(label)
+
+            self.graph.node(
+                place.name,  # Node ID (not escaped)
+                label=label,
+                shape="ellipse",
+                style="filled",
+                fillcolor="#e0e0f0"
+            )
 
         # Add Transitions
         for transition in cpn.transitions:
-            lines = [transition.name]
+            lines = []
+
+            # Transition name
+            lines.append(transition.name)
+
+            # Guard
             if transition.guard_expr:
-                lines.append(f"Guard: {transition.guard_expr}")
+                guard_escaped = summarize_label(transition.guard_expr, max_len=500)
+                lines.append(f"Guard: {guard_escaped}")
+
+            # Variables
             if transition.variables:
-                vars_str = ", ".join(transition.variables)
+                # Short summary of variables
+                vars_str = ", ".join(
+                    summarize_label(v, max_len=100) for v in transition.variables
+                )
                 lines.append(f"Vars: {vars_str}")
+
+            # Delay
             if transition.transition_delay > 0:
                 lines.append(f"Delay: {transition.transition_delay}")
 
-            label = "\\n".join(lines)
-            self.graph.node(transition.name,
-                            label=html.escape(label),
-                            shape="rectangle",
-                            style="rounded,filled",
-                            fillcolor="#ffe0e0")
+            # Combine into a single label
+            raw_label = "\\n".join(lines)
+            # Summarize/truncate if needed
+            final_label = summarize_label(raw_label)
+
+            self.graph.node(
+                transition.name,
+                label=final_label,
+                shape="rectangle",
+                style="rounded,filled",
+                fillcolor="#ffe0e0"
+            )
 
         # Add Arcs
         for arc in cpn.arcs:
             source_name = arc.source.name if hasattr(arc.source, 'name') else arc.source
             target_name = arc.target.name if hasattr(arc.target, 'name') else arc.target
-            arc_label = html.escape(str(arc.expression))
+
+            # Arc expression
+            raw_expr = str(arc.expression)
+            arc_label = summarize_label(raw_expr, max_len=500)
+
             self.graph.edge(source_name, target_name, label=arc_label)
 
         return self
@@ -89,22 +145,19 @@ class CPNGraphViz:
         Save (render) the graph to a file.
 
         The file will be saved in the temporary directory.
-        The 'filename' is a base name without path, the renderer will append the format and '-O' suffix.
+        The 'filename' is a base name without path,
+        the renderer will append the format and '-O' suffix.
         """
         if self.graph is None:
             raise RuntimeError("Graph not created. Call apply() first.")
-        # Render the file in the temporary directory
         out_path = self.graph.render(filename=filename, cleanup=True)
-        # Move the rendered file back to the current directory if needed
-        base, ext = os.path.splitext(out_path)
         final_path = os.path.join(os.getcwd(), os.path.basename(out_path))
         if os.path.abspath(final_path) != os.path.abspath(out_path):
             os.rename(out_path, final_path)
-        # Cleanup the temp directory if desired (optional)
         return final_path
 
 
-# Example usage (you can adjust as needed):
+# Example usage (modify as needed):
 if __name__ == "__main__":
     cs_definitions = """
     colset INT = int timed;
@@ -129,5 +182,8 @@ if __name__ == "__main__":
     marking.set_tokens("P1", [5, 12])
 
     viz = CPNGraphViz().apply(cpn, marking, format="png")
-    viz.view()
-    # You can also call viz.view() to open the image
+    # Uncomment to view:
+    # viz.view()
+    # Or save:
+    # path = viz.save("example_cpn")
+    # print("Saved to:", path)
