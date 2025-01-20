@@ -4,9 +4,6 @@ import pm4py
 from frozendict import frozendict
 from pm4py.objects.log.obj import EventLog
 from pm4py.objects.petri_net.obj import PetriNet
-from pm4py.algo.simulation.montecarlo.utils import replay
-from pm4py.algo.decision_mining import algorithm as decision_mining
-from cpnpy.util import simp_guard
 from cpnpy.util import rv_to_stri
 from typing import Tuple
 from cpnpy.cpn.cpn_imp import *
@@ -79,21 +76,28 @@ def apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None) -> Tuple[C
     pro_disc_alg = parameters.get("pro_disc_alg", pm4py.discover_petri_net_inductive)
     original_case_attributes = parameters.get("original_case_attributes", {"case:concept:name"})
     enable_guards_discovery = parameters.get("enable_guards_discovery", False)
+    enable_timing_discovery = parameters.get("enable_timing_discovery", True)
 
     log = pm4py.convert_to_dataframe(log)
 
     # applies a process discovery algorithm in pm4py, discovering an accepting Petri net from a traditional event log
     net, im, fm = pro_disc_alg(log, parameters)
     if enable_guards_discovery:
+        from pm4py.algo.decision_mining import algorithm as decision_mining
+
         # if the discovery of the guards is enabled, discover the guards on the transitions
         # (conditions regulating the execution).
         net, im, fm = decision_mining.create_data_petri_nets_with_decisions(log, net, im, fm)
 
-    # discovers a stochastic map, associating each transition of the original accepting Petri net with a stochastic
-    # variable indicating the delay
-    stochastic_map = replay.get_map_from_log_and_net(log, net, im, fm)
-    # transforms the stochastic variables inside the map into arc delayed in the notation used for cpnpy.
-    stochastic_map = rv_to_stri.transform_transition_dict(stochastic_map)
+    stochastic_map = {}
+    if enable_timing_discovery:
+        from pm4py.algo.simulation.montecarlo.utils import replay
+
+        # discovers a stochastic map, associating each transition of the original accepting Petri net with a stochastic
+        # variable indicating the delay
+        stochastic_map = replay.get_map_from_log_and_net(log, net, im, fm)
+        # transforms the stochastic variables inside the map into arc delayed in the notation used for cpnpy.
+        stochastic_map = rv_to_stri.transform_transition_dict(stochastic_map)
 
     # create a single color set (representing the case level attributes)
     parser = ColorSetParser()
@@ -111,6 +115,7 @@ def apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None) -> Tuple[C
     trans_guards = {}
     for trans in net.transitions:
         if "guard" in trans.properties:
+            from cpnpy.util import simp_guard
             eval = simp_guard.parse_boolean_expression(trans.properties["guard"],
                                                        variables_of_interest=list(original_case_attributes))
             if str(eval) != "True":
@@ -167,9 +172,11 @@ def apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None) -> Tuple[C
                                [frozendict({"case:concept:name": "CASE_" + str(i + 1)}) for i in
                                 range(num_simulated_cases)])
 
-    code = """
-from scipy.stats import norm, uniform, expon, lognorm, gamma
-    """
+    code = ""
+    if enable_timing_discovery:
+        code = """
+    from scipy.stats import norm, uniform, expon, lognorm, gamma
+        """
     context = EvaluationContext(user_code=code)
 
     return cpn, marking, context

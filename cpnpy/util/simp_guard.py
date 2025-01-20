@@ -1,7 +1,6 @@
 import re
 import sympy
 from sympy import And, Or, Eq, Lt, Le, Gt, Ge
-from sympy.logic.boolalg import simplify_logic
 
 
 def parse_comparison(comp_str, symbol_table, treat_inf_as_symbol=True):
@@ -168,6 +167,7 @@ def parse_boolean_expression(expr_str, variables_of_interest=None, treat_inf_as_
         or_expr = and_part if or_expr is None else Or(or_expr, and_part)
 
     # 4) Simplify the final expression
+    from sympy.logic.boolalg import simplify_logic
     simplified_expr = simplify_logic(or_expr, force=True, form='dnf')
     return simplified_expr
 

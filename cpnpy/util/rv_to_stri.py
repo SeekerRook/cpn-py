@@ -1,6 +1,3 @@
-import numpy as np
-from scipy.stats import norm, uniform, expon, lognorm, gamma
-
 def random_variable_to_string(rv):
     """
     Given a pm4py RandomVariable (rv), produce a string that starts with '@+'
