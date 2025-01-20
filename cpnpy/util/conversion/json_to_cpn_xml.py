@@ -427,3 +427,66 @@ def json_to_cpn_xml(
         '"http://www.daimi.au.dk/~cpntools/bin/DTD/2/cpn.dtd">\n'
     )
     return doctype_line + xml_str
+
+
+if __name__ == "__main__":
+    # Minimal example JSON (adjust as needed):
+    sample_json = {
+        "colorSets": [
+            "colset IntSet = int;",
+            "colset DataSet = string;"
+        ],
+        "places": [
+            {"name": "P1", "colorSet": "IntSet"},
+            {"name": "P2", "colorSet": "DataSet"}
+        ],
+        "transitions": [
+            {
+                "name": "T1",
+                "variables": ["n", "p"],  # no color set known, defaulting to INT in example
+                "inArcs": [
+                    {"place": "P1", "expression": "1`n"}
+                ],
+                "outArcs": [
+                    {"place": "P2", "expression": "1`p"}
+                ]
+            }
+        ],
+        "initialMarking": {
+            "P1": {"tokens": [1, 2]},
+            "P2": {"tokens": ["hello"]}
+        },
+        "evaluationContext": None
+    }
+
+    # Minimal coordinate data (must match node titles "P1", "P2", "T1")
+    sample_coords = {
+        "nodes": [
+            {
+                "id": "node1",
+                "title": "P1",
+                "labels": ["P1"],
+                "geometry": {"type": "ellipse", "cx": -70.0, "cy": 85.0, "rx": 20.0, "ry": 10.0},
+                "text_positions": [(-70.0, 85.0)]
+            },
+            {
+                "id": "node2",
+                "title": "P2",
+                "labels": ["P2"],
+                "geometry": {"type": "ellipse", "cx": 50.0, "cy": 60.0, "rx": 20.0, "ry": 10.0},
+                "text_positions": [(50.0, 60.0)]
+            },
+            {
+                "id": "node3",
+                "title": "T1",
+                "labels": ["T1"],
+                "geometry": {"type": "ellipse", "cx": -10.0, "cy": 10.0, "rx": 15.0, "ry": 8.0},
+                "text_positions": [(-10.0, 10.0)]
+            }
+        ],
+        "edges": []
+    }
+
+    # Generate XML
+    cpn_xml = json_to_cpn_xml(sample_json, sample_coords)
+    print(cpn_xml)
