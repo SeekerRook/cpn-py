@@ -1,5 +1,7 @@
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Tuple, Union, Optional
+import json
+from random import randrange
 
 
 def json_to_cpn_xml(
@@ -429,6 +431,34 @@ def json_to_cpn_xml(
     return doctype_line + xml_str
 
 
+def apply(json_path: str):
+    if type(json_path) is str:
+        with open("provaa.json", "r") as f:
+            data = json.load(f)
+    else:
+        data = json_path
+
+    from cpnpy.cpn.importer import import_cpn_from_json
+    cpn, marking, context = import_cpn_from_json(data)
+
+    temp_file_name = "temp_" + str(randrange(1, 100000000)).zfill(10)
+
+    from cpnpy.visualization.visualizer import CPNGraphViz
+    viz = CPNGraphViz()
+    viz.apply(cpn, marking, format="svg")
+    viz.save(temp_file_name)
+
+    from cpnpy.util import svg_parser
+    coords = svg_parser.parse_graphviz_svg(temp_file_name+".svg")
+
+    import os
+    os.remove(temp_file_name+".svg")
+
+    cpn_xml = json_to_cpn_xml(sample_json, coords)
+
+    return cpn_xml
+
+
 if __name__ == "__main__":
     # Minimal example JSON (adjust as needed):
     sample_json = {
@@ -459,34 +489,8 @@ if __name__ == "__main__":
         "evaluationContext": None
     }
 
-    # Minimal coordinate data (must match node titles "P1", "P2", "T1")
-    sample_coords = {
-        "nodes": [
-            {
-                "id": "node1",
-                "title": "P1",
-                "labels": ["P1"],
-                "geometry": {"type": "ellipse", "cx": -70.0, "cy": 85.0, "rx": 20.0, "ry": 10.0},
-                "text_positions": [(-70.0, 85.0)]
-            },
-            {
-                "id": "node2",
-                "title": "P2",
-                "labels": ["P2"],
-                "geometry": {"type": "ellipse", "cx": 50.0, "cy": 60.0, "rx": 20.0, "ry": 10.0},
-                "text_positions": [(50.0, 60.0)]
-            },
-            {
-                "id": "node3",
-                "title": "T1",
-                "labels": ["T1"],
-                "geometry": {"type": "ellipse", "cx": -10.0, "cy": 10.0, "rx": 15.0, "ry": 8.0},
-                "text_positions": [(-10.0, 10.0)]
-            }
-        ],
-        "edges": []
-    }
+    cpn_xml = apply(sample_json)
 
-    # Generate XML
-    cpn_xml = json_to_cpn_xml(sample_json, sample_coords)
-    print(cpn_xml)
+    F = open("../../../prova.cpn", "w")
+    F.write(cpn_xml)
+    F.close()
