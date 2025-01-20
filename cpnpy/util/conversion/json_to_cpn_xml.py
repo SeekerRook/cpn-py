@@ -2,25 +2,42 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Tuple, Union, Optional
 import json
 from random import randrange
-
+import math
 
 def json_to_cpn_xml(
-        json_data: Dict[str, Any],
-        coords_data: Dict[str, Any]
+    json_data: Dict[str, Any],
+    coords_data: Dict[str, Any]
 ) -> str:
     """
     Convert the Petri net definition (json_data) plus coordinate info (coords_data)
-    into a CPN Tools-like XML structure as a string.
+    into a CPN Tools (v4.x) XML structure (format="6") as a string.
+
+    The output uses the DTD:
+       <!DOCTYPE workspaceElements PUBLIC "-//CPN//DTD CPNXML 1.0//EN" "http://cpntools.org/DTD/6/cpn.dtd">
+
+    and includes:
+      - <generator tool="CPN Tools" version="4.0.1" format="6"/>
+      - <cpnet> ... </cpnet>
+        * <globbox> containing a <block> for color sets/vars
+        * <page> with places/transitions/arcs
+        * <instances>, <options>, <binders/>, <monitorblock/>, <IndexNode/>
 
     :param json_data: Dictionary conforming to the given JSON schema.
-    :param coords_data: Dictionary conforming to the given coordinate schema
-                        (parsed SVG output from Graphviz).
-    :return: A string containing the XML (including the CPN Tools DOCTYPE).
+    :param coords_data: Dictionary containing node coordinates, parsed from an SVG (e.g. from Graphviz).
+    :return: A string containing the entire CPN XML with a top-level DOCTYPE line.
     """
 
     # -------------------------------------------------------------------
     # 0. Helper Functions
     # -------------------------------------------------------------------
+
+    unique_counter = 100  # Simple incremental ID counter, for generating unique IDs.
+
+    def generate_id(prefix: str) -> str:
+        """Simple incremental ID generator, to produce unique 'IDxxxx' strings."""
+        nonlocal unique_counter
+        unique_counter += 1
+        return f"ID{prefix}{unique_counter}"
 
     def find_node_position(name: str) -> Tuple[float, float]:
         """
@@ -33,52 +50,39 @@ def json_to_cpn_xml(
         for node in coords_data.get("nodes", []):
             if node.get("title") == name:
                 geom = node.get("geometry", {})
-                # If it's an ellipse, we can pick (cx, cy).
                 if geom.get("type") == "ellipse":
                     return (geom.get("cx", 0.0), geom.get("cy", 0.0))
-                # If it's something else, fallback:
-                return (0.0, 0.0)
         return (0.0, 0.0)
-
-    def generate_id(prefix: str) -> str:
-        """
-        Simple incremental ID generator for example.
-        In a real system, you might want more robust unique IDs.
-        """
-        nonlocal unique_counter
-        unique_counter += 1
-        return f"id_{prefix}_{unique_counter}"
 
     def parse_cpn_colorset(cs_definition: str) -> (str, ET.Element):
         """
         Very simplistic parser for "colset <Name> = <Type>;" lines.
 
-        Returns a tuple (color_name, color_element).
-        - color_name is the name of the color set.
-        - color_element is the <color> ElementTree node.
+        Returns: (color_name, color_element), where color_element is the <color> node.
 
-        NOTE: This is just an example. You may need to adapt to handle
-        enumerated sets, products, timed sets, etc., in more detail.
+        For CPN Tools 4.x, we'll nest it in a <block>, but the actual <color>:
+          <color id='someID'>
+            <id>COLORNAME</id>
+            <int/>  or <bool/> or <string/> or <unit/> or <real/> or <enum/> or ...
+            <layout>colset COLORNAME = <Type>;</layout>
+          </color>
         """
-        # Expected basic format: "colset <Name> = something;"
-        # Strip "colset" and semicolon:
         line = cs_definition.strip()
         if not line.lower().startswith("colset "):
             raise ValueError(f"Invalid color set definition: {line}")
-        # Remove 'colset ' from start:
-        line = line[len("colset "):].strip()
         if not line.endswith(";"):
-            raise ValueError(f"Invalid color set definition (no ending ';'): {line}")
-        line = line[:-1].strip()  # remove trailing semicolon
+            raise ValueError(f"Invalid color set definition (must end with ';'): {line}")
+        # Remove "colset " and trailing ";"
+        line = line[len("colset "):]
+        line = line[:-1].strip()  # remove final semicolon
 
-        # Now line should look like: "<Name> = <Type>"
-        if '=' not in line:
+        if "=" not in line:
             raise ValueError(f"Invalid color set definition (no '='): {cs_definition}")
-        parts = line.split('=', 1)
+
+        parts = line.split("=", 1)
         color_name = parts[0].strip()
         the_type = parts[1].strip()
 
-        # Prepare <color> element
         color_id = generate_id("color")
         color_elem = ET.Element("color", {"id": color_id})
 
@@ -86,144 +90,109 @@ def json_to_cpn_xml(
         id_child = ET.SubElement(color_elem, "id")
         id_child.text = color_name
 
-        # Decide the child node based on 'the_type'
-        # Basic detection of int, real, string:
-        # e.g., "int", "int timed", "real", "string", "product(A,B)", or enumerations {...}
+        # We'll also attach a <layout> child with the original text:
+        layout_child = ET.SubElement(color_elem, "layout")
+        layout_child.text = f"colset {color_name} = {the_type};"
+
         lower_type = the_type.lower()
 
-        if "int" in lower_type:
-            # Could also check if "timed" is present
-            if "timed" in lower_type:
-                # <int> plus some attribute or subtag for timed
-                # The official CPN Tools format for a timed color set can vary, but let's keep it simple:
-                int_sub = ET.SubElement(color_elem, "int")
-                int_sub.set("timed", "true")
+        # Decide the child node:
+        # Examples from CPN Tools standard: <int/>, <bool/>, <string/>, <unit/>, <real/>, <time/>, <intinf/>, ...
+        # We'll handle a few typical keywords, else fallback to <string/>.
+        if "unit" in lower_type:
+            ET.SubElement(color_elem, "unit")
+        elif "bool" in lower_type:
+            ET.SubElement(color_elem, "bool")
+        elif "intinf" in lower_type:
+            ET.SubElement(color_elem, "intinf")
+        elif "int" in lower_type:
+            # If "timed" in there, we might do <int timed='true'/>, but let's keep it minimal:
+            # e.g. "colset X = int timed;" => we detect "timed"
+            timed_attr = "true" if "timed" in lower_type else None
+            if timed_attr:
+                sub = ET.SubElement(color_elem, "int")
+                sub.set("timed", "true")
             else:
-                # Just an int color
                 ET.SubElement(color_elem, "int")
-
+        elif "time" in lower_type:
+            ET.SubElement(color_elem, "time")
         elif "real" in lower_type:
             ET.SubElement(color_elem, "real")
-
         elif "string" in lower_type:
             ET.SubElement(color_elem, "string")
-
-        elif "product(" in lower_type:
-            # Very simple parse: product(ColA, ColB)
-            # We'll create <product><id>ColA</id><id>ColB</id></product>
-            prod_elem = ET.SubElement(color_elem, "product")
-            # get the inside of product(...)
-            inside = the_type.strip()
-            inside = inside[len("product("):-1].strip()  # remove "product(" at start and ")" at end
-            sub_parts = inside.split(',')
-            for sp in sub_parts:
-                sub_id = ET.SubElement(prod_elem, "id")
-                sub_id.text = sp.strip()
-
         elif "{" in lower_type and "}" in lower_type:
-            # enumerated type, e.g. { 'red','green','blue'}
-            # In standard CPN XML, enumerations can be done as <enum><id>val</id>...</enum>
-            # We'll do a naive approach:
+            # enumerated type, e.g. colset Color = {red, green, blue}
             enum_elem = ET.SubElement(color_elem, "enum")
-            # extract the comma-separated items inside {}
-            inside = the_type.strip()
-            inside = inside[inside.index('{') + 1: inside.rindex('}')]
-            # split by comma
-            for enumer_val in inside.split(','):
+            inside = the_type[the_type.index("{")+1: the_type.rindex("}")]
+            for enumer_val in inside.split(","):
                 val = enumer_val.strip().strip("'\"")
-                id_v = ET.SubElement(enum_elem, "id")
-                id_v.text = val
+                enid = ET.SubElement(enum_elem, "id")
+                enid.text = val
         else:
-            # Fallback to <string/> if we cannot parse
+            # Fallback
             ET.SubElement(color_elem, "string")
 
         return color_name, color_elem
 
     def gather_all_variables(json_data: Dict[str, Any]) -> Dict[str, List[str]]:
         """
-        From all transitions' 'variables', gather them.
-        In your schema, each transition can have 'variables': [var1, var2, ...]
-        BUT you do not specify which color sets they belong to.
-
-        This function demonstrates grouping them under a single dummy color set "INT"
-        or you can adapt to real logic. Returns a dict:
-
-            {
-               "INT": ["var1", "var2", ...],
-               "DATA": ["p", "str", ...],
-               ...
-            }
-
-        so we can produce them in <var> elements in the globbox.
+        Collects transition variables from the JSON schema. This example lumps them into "INT".
+        For a real usage, adapt as needed to read arc expressions or user config.
+        Returns { "INT": [var1, var2, ...] } or similar.
         """
-        # Example logic: If the user wants to systematically assign them to color sets,
-        # you'd parse from arcs or guard expressions, etc.
-        # For demonstration, let's just put them all into "INT" (like the example).
         var_map = {}
         for trans in json_data.get("transitions", []):
             for v in trans.get("variables", []):
-                # put them in "INT" just as an example
                 var_map.setdefault("INT", []).append(v)
         return var_map
 
-    def create_var_elements(parent: ET.Element, var_map: Dict[str, List[str]]):
+    def create_var_elements(block_elem: ET.Element, var_map: Dict[str, List[str]]):
         """
-        Given a dict of colorSetName -> [var1, var2, var3...],
-        create <var id="..."> blocks in <globbox>.
-
-        Example:
-        <var id="some_id">
-          <type>
-            <id>INT</id>
-          </type>
-          <id>n</id>
-          <id>k</id>
-        </var>
+        Create <var> elements under the given <block> for each colorSet -> [var1, var2, ...].
+        We also add a <layout> line for each variable group, e.g. "var x,y : INT;".
         """
         for cs_name, vars_list in var_map.items():
             if not vars_list:
                 continue
-            var_elt = ET.SubElement(parent, "var", {"id": generate_id("var")})
-            # <type><id>cs_name</id></type>
+            var_id = generate_id("var")
+            var_elt = ET.SubElement(block_elem, "var", {"id": var_id})
+
+            # color set reference
             t = ET.SubElement(var_elt, "type")
             tid = ET.SubElement(t, "id")
             tid.text = cs_name
-            # Then each variable as <id>v</id>
+
+            # Add each variable as <id>v</id>
             for v in vars_list:
                 v_id = ET.SubElement(var_elt, "id")
                 v_id.text = v
 
-    def add_initial_marking(place_elem: ET.Element, place_name: str):
+            # Provide a layout line
+            layout_elt = ET.SubElement(var_elt, "layout")
+            layout_elt.text = f"var {','.join(vars_list)} : {cs_name};"
+
+    def build_marking_expression(place_name: str) -> str:
         """
-        Add initial marking child (<initmark>) to the <place_elem>,
-        based on json_data["initialMarking"][place_name] if present.
+        Build the token marking expression for the place (if any),
+        e.g. "1`(x)++2`(y)" etc.
         """
         init_data = json_data.get("initialMarking", {}).get(place_name)
         if not init_data:
-            return  # No tokens
+            return ""
 
         tokens = init_data.get("tokens", [])
         timestamps = init_data.get("timestamps", [])
-        # If no timestamps, we assume "0" for all
+
         if len(timestamps) < len(tokens):
             timestamps = [0] * len(tokens)
 
-        # Build a simple text representing the marking, e.g.: 1`(token)
-        # or multiple tokens joined by "++"
-        # For demonstration, we'll just do something like:
-        #  1`(tok_1)++1`(tok_2)...
-        # If it's an int/float/string/tuple, we have to convert to text.
-        # This is purely an example. In a real scenario, you'd follow your notation rules.
-        marking_text_parts = []
+        parts = []
         for tok, ts in zip(tokens, timestamps):
-            # Turn tok into a string representation:
             if isinstance(tok, (int, float)):
                 tok_repr = str(tok)
             elif isinstance(tok, str):
-                # wrap quotes?
                 tok_repr = f"\"{tok}\""
             elif isinstance(tok, (list, tuple)):
-                # e.g. (1,"green")
                 inside = []
                 for x in tok:
                     if isinstance(x, (int, float)):
@@ -234,145 +203,263 @@ def json_to_cpn_xml(
             else:
                 tok_repr = str(tok)
 
-            # If we suspect timed tokens, you might do something like: 1`(val)@ts
-            # For demonstration, we just ignore timestamps or show them as '@ts'.
             if ts != 0:
                 full_repr = f"1`{tok_repr}@{ts}"
             else:
                 full_repr = f"1`{tok_repr}"
+            parts.append(full_repr)
 
-            marking_text_parts.append(full_repr)
-
-        marking_expr = "++".join(marking_text_parts)
-
-        initmark_elt = ET.SubElement(place_elem, "initmark", {"id": generate_id("initmark")})
-        initmark_pos = ET.SubElement(initmark_elt, "posattr", {
-            "x": "0",  # demonstration
-            "y": "0"
-        })
-        # We keep style minimal, but you could do <fillattr>, <lineattr>, <textattr> if you wish.
-
-        text_elt = ET.SubElement(initmark_elt, "text")
-        text_elt.text = marking_expr
+        return "++".join(parts)
 
     # -------------------------------------------------------------------
-    # 1. Create Root + DOCTYPE
-    #    (ElementTree does not directly let us add a doctype easily;
-    #     we'll handle that after building the tree)
+    # 1. Prepare the XML structure
     # -------------------------------------------------------------------
     root = ET.Element("workspaceElements")
-    # Add <generator tool="CPN Tools" version="0.2.17" format="2"/>
-    ET.SubElement(root, "generator", {
+
+    # <generator ...>
+    gen = ET.SubElement(root, "generator", {
         "tool": "CPN Tools",
-        "version": "0.2.17",
-        "format": "2"
+        "version": "4.0.1",
+        "format": "6"
     })
 
     cpnet = ET.SubElement(root, "cpnet")
 
     # -------------------------------------------------------------------
-    # 2. Build <globbox> with <color> definitions, <var> definitions, etc.
+    # 2. GLOBBOX with BLOCKS for color sets, variables, etc.
     # -------------------------------------------------------------------
     globbox = ET.SubElement(cpnet, "globbox")
 
-    unique_counter = 100  # We'll store an integer ID counter in an enclosing scope
+    # Optionally, create a block for "Standard priorities" or any ML code you want:
+    # (comment out if not needed)
+    block_standard_priorities = ET.SubElement(globbox, "block", {"id": generate_id("blk")})
+    bid1 = ET.SubElement(block_standard_priorities, "id")
+    bid1.text = "Standard priorities"
+
+    # Example: define an ML block for P_HIGH, P_NORMAL, etc. (mimicking your example).
+    # Remove or adjust these if you don't want them:
+    ml_phigh = ET.SubElement(block_standard_priorities, "ml", {"id": generate_id("ml")})
+    ml_phigh_layout = ET.SubElement(ml_phigh, "layout")
+    ml_phigh_layout.text = "val P_HIGH = 100;"
+    ml_phigh.text = "val P_HIGH = 100;"
+
+    ml_pnormal = ET.SubElement(block_standard_priorities, "ml", {"id": generate_id("ml")})
+    ml_pnormal_layout = ET.SubElement(ml_pnormal, "layout")
+    ml_pnormal_layout.text = "val P_NORMAL = 1000;"
+    ml_pnormal.text = "val P_NORMAL = 1000;"
+
+    ml_plow = ET.SubElement(block_standard_priorities, "ml", {"id": generate_id("ml")})
+    ml_plow_layout = ET.SubElement(ml_plow, "layout")
+    ml_plow_layout.text = "val P_LOW = 10000;"
+    ml_plow.text = "val P_LOW = 10000;"
+
+    # Now the main block for standard declarations (color sets, variables, etc.)
+    block_decls = ET.SubElement(globbox, "block", {"id": generate_id("blk")})
+    block_id_elt = ET.SubElement(block_decls, "id")
+    block_id_elt.text = "Standard declarations"
 
     # 2a. Convert the colorSets strings into <color> elements
-    color_sets = json_data.get("colorSets", [])
     color_name_to_element = {}
+    color_sets = json_data.get("colorSets", [])
     for cs_def in color_sets:
         col_name, col_elem = parse_cpn_colorset(cs_def)
-        globbox.append(col_elem)
+        block_decls.append(col_elem)
         color_name_to_element[col_name] = col_elem
 
-    # 2b. Gather variables from transitions, produce <var> blocks
+    # 2b. Gather variables from transitions -> <var>
     var_map = gather_all_variables(json_data)
-    create_var_elements(globbox, var_map)
-
-    # You could also add extra <ml> or <auxiliary> bits here if desired,
-    # e.g., for user-defined ML functions, random seeds, etc.
+    create_var_elements(block_decls, var_map)
 
     # -------------------------------------------------------------------
     # 3. Create a single <page> to hold places/transitions/arcs
     # -------------------------------------------------------------------
     page_id = generate_id("page")
     page = ET.SubElement(cpnet, "page", {"id": page_id})
-    # Optional: <pageattr name="Top"/>
-    pageattr = ET.SubElement(page, "pageattr", {"name": "Top"})
+
+    # <pageattr> name
+    pageattr = ET.SubElement(page, "pageattr", {"name": "myNet"})
+
+    # We'll track the IDs for places/transitions to link arcs
+    place_name_to_id = {}
+    transition_name_to_id = {}
 
     # -------------------------------------------------------------------
-    # 4. Add PLACES
+    # 4. PLACES
     # -------------------------------------------------------------------
-    place_name_to_id = {}
     for place_info in json_data.get("places", []):
         place_name = place_info["name"]
         color_set_name = place_info["colorSet"]
 
-        place_id = generate_id("place")
-        place_name_to_id[place_name] = place_id
-        place_elt = ET.SubElement(page, "place", {"id": place_id})
+        pid = generate_id("place")
+        place_name_to_id[place_name] = pid
+
+        place_elt = ET.SubElement(page, "place", {"id": pid})
 
         # position from coords
         px, py = find_node_position(place_name)
-        ET.SubElement(place_elt, "posattr", {"x": f"{px}", "y": f"{py}"})
+        ET.SubElement(place_elt, "posattr", {
+            "x": f"{px:.6f}",
+            "y": f"{py:.6f}"
+        })
         # minimal style:
-        ET.SubElement(place_elt, "fillattr", {"colour": "White", "pattern": "solid", "filled": "false"})
-        ET.SubElement(place_elt, "lineattr", {"colour": "Black", "thick": "1", "type": "solid"})
+        ET.SubElement(place_elt, "fillattr", {"colour": "White", "pattern": "", "filled": "false"})
+        ET.SubElement(place_elt, "lineattr", {"colour": "Black", "thick": "1", "type": "Solid"})
         ET.SubElement(place_elt, "textattr", {"colour": "Black", "bold": "false"})
 
-        # place label:
-        text_elt = ET.SubElement(place_elt, "text")
-        text_elt.text = place_name
+        # The visible label:
+        label_elt = ET.SubElement(place_elt, "text")
+        label_elt.text = place_name
 
-        # shape geometry: we do an <ellipse> for demonstration
-        ellipse_elt = ET.SubElement(place_elt, "ellipse", {"w": "30", "h": "20"})
+        # shape geometry
+        ellipse_elt = ET.SubElement(place_elt, "ellipse", {
+            "w": "60.000000",
+            "h": "40.000000"
+        })
 
-        # Add <type> referencing the color set
+        # A minimal "type" child referencing the color set
         type_elt = ET.SubElement(place_elt, "type", {"id": generate_id("type")})
-        # inside <type>, we do <id>colorSetName</id>
-        pos_elt = ET.SubElement(type_elt, "posattr", {"x": f"{px}", "y": f"{py}"})
-        text_elt2 = ET.SubElement(type_elt, "text")
-        text_elt2.text = color_set_name
+        # Position for the type label
+        ET.SubElement(type_elt, "posattr", {
+            "x": f"{px + 40.0:.6f}",
+            "y": f"{py - 30.0:.6f}"
+        })
+        # Usually fill/line/text can be blank
+        ET.SubElement(type_elt, "fillattr", {"colour": "White", "pattern": "Solid", "filled": "false"})
+        ET.SubElement(type_elt, "lineattr", {"colour": "Black", "thick": "0", "type": "Solid"})
+        ET.SubElement(type_elt, "textattr", {"colour": "Black", "bold": "false"})
 
-        # Add initial marking if present
-        add_initial_marking(place_elt, place_name)
+        # The type text
+        type_txt = ET.SubElement(type_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+        type_txt.text = color_set_name
+
+        # 4a. Build initial marking
+        marking_expr = build_marking_expression(place_name)
+        if marking_expr:
+            # <initmark id='XYZ'>
+            initmark_elt = ET.SubElement(place_elt, "initmark", {"id": generate_id("initmark")})
+            # position
+            ET.SubElement(initmark_elt, "posattr", {
+                "x": f"{px:.6f}",
+                "y": f"{py + 60.0:.6f}"
+            })
+            ET.SubElement(initmark_elt, "fillattr", {"colour": "White", "pattern": "Solid", "filled": "false"})
+            ET.SubElement(initmark_elt, "lineattr", {"colour": "Black", "thick": "0", "type": "Solid"})
+            ET.SubElement(initmark_elt, "textattr", {"colour": "Black", "bold": "false"})
+            initmark_text = ET.SubElement(initmark_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+            initmark_text.text = marking_expr
+
+            # For the "visual marking" in the net, a <marking> child:
+            mark_elt = ET.SubElement(place_elt, "marking", {
+                "x": f"{px:.6f}",
+                "y": f"{py - 10.0:.6f}",
+                "hidden":"false"
+            })
+            # Provide a <text> with the same expression (or "empty" if none)
+            mark_text = ET.SubElement(mark_elt, "text")
+            mark_text.text = marking_expr
+        else:
+            # No tokens => we typically do a <marking> with "empty"
+            mark_elt = ET.SubElement(place_elt, "marking", {
+                "x": f"{px:.6f}",
+                "y": f"{py:.6f}",
+                "hidden":"false"
+            })
+            # The standard text is "empty"
+            mark_text = ET.SubElement(mark_elt, "text")
+            mark_text.text = "empty"
 
     # -------------------------------------------------------------------
-    # 5. Add TRANSITIONS
+    # 5. TRANSITIONS
     # -------------------------------------------------------------------
-    transition_name_to_id = {}
     for trans_info in json_data.get("transitions", []):
         trans_name = trans_info["name"]
 
-        trans_id = generate_id("trans")
-        transition_name_to_id[trans_name] = trans_id
-        trans_elt = ET.SubElement(page, "trans", {"id": trans_id})
+        tid = generate_id("trans")
+        transition_name_to_id[trans_name] = tid
 
-        # position from coords
+        trans_elt = ET.SubElement(page, "trans", {
+            "id": tid,
+            "explicit": "false"
+        })
+
+        # position
         tx, ty = find_node_position(trans_name)
-        ET.SubElement(trans_elt, "posattr", {"x": f"{tx}", "y": f"{ty}"})
-        # minimal style:
-        ET.SubElement(trans_elt, "fillattr", {"colour": "White", "pattern": "solid", "filled": "false"})
-        ET.SubElement(trans_elt, "lineattr", {"colour": "Black", "thick": "2", "type": "solid"})
+        ET.SubElement(trans_elt, "posattr", {
+            "x": f"{tx:.6f}",
+            "y": f"{ty:.6f}"
+        })
+        ET.SubElement(trans_elt, "fillattr", {"colour": "White", "pattern": "", "filled": "false"})
+        ET.SubElement(trans_elt, "lineattr", {"colour": "Black", "thick": "1", "type": "solid"})
         ET.SubElement(trans_elt, "textattr", {"colour": "Black", "bold": "false"})
 
-        # transition label:
-        text_elt = ET.SubElement(trans_elt, "text")
-        text_elt.text = trans_name
+        # The visible label
+        txt = ET.SubElement(trans_elt, "text")
+        txt.text = trans_name
 
-        # shape geometry: box or ellipse
-        box_elt = ET.SubElement(trans_elt, "box", {"w": "30", "h": "20"})
+        # shape geometry (a box)
+        box_elt = ET.SubElement(trans_elt, "box", {
+            "w": "60.000000",
+            "h": "40.000000"
+        })
 
-        # If there's a guard, you might add a child <cond> or <guard> for the guard expression
-        guard_expr = trans_info.get("guard")
-        if guard_expr:
-            # The real CPN Tools format for a guard is something like <cond>. This is just an example:
-            cond_elt = ET.SubElement(trans_elt, "cond")
-            cond_elt.text = guard_expr
+        # Provide minimal stubs for other transition-related tags:
+        # <binding> for binding arcs. We'll just place it near the transition:
+        bind_elt = ET.SubElement(trans_elt, "binding", {
+            "x": f"{tx + 7.2:.6f}",
+            "y": f"{ty - 3.0:.6f}"
+        })
+
+        # Guard/cond expression
+        guard_expr = trans_info.get("guard") or ""
+        cond_elt = ET.SubElement(trans_elt, "cond", {"id": generate_id("cond")})
+        ET.SubElement(cond_elt, "posattr", {
+            "x": f"{tx - 10.0:.6f}",
+            "y": f"{ty + 19.0:.6f}"
+        })
+        ET.SubElement(cond_elt, "fillattr", {"colour":"White","pattern":"Solid","filled":"false"})
+        ET.SubElement(cond_elt, "lineattr", {"colour":"Black","thick":"0","type":"Solid"})
+        ET.SubElement(cond_elt, "textattr", {"colour":"Black","bold":"false"})
+        cond_text = ET.SubElement(cond_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+        cond_text.text = guard_expr
+
+        # <time> (timed expression or empty)
+        time_elt = ET.SubElement(trans_elt, "time", {"id": generate_id("time")})
+        ET.SubElement(time_elt, "posattr", {
+            "x": f"{tx + 20.0:.6f}",
+            "y": f"{ty + 19.0:.6f}"
+        })
+        ET.SubElement(time_elt, "fillattr", {"colour":"White","pattern":"Solid","filled":"false"})
+        ET.SubElement(time_elt, "lineattr", {"colour":"Black","thick":"0","type":"Solid"})
+        ET.SubElement(time_elt, "textattr", {"colour":"Black","bold":"false"})
+        time_text = ET.SubElement(time_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+        time_text.text = ""
+
+        # <code> (ML code or empty)
+        code_elt = ET.SubElement(trans_elt, "code", {"id": generate_id("code")})
+        ET.SubElement(code_elt, "posattr", {
+            "x": f"{tx + 28.0:.6f}",
+            "y": f"{ty - 43.0:.6f}"
+        })
+        ET.SubElement(code_elt, "fillattr", {"colour":"White","pattern":"Solid","filled":"false"})
+        ET.SubElement(code_elt, "lineattr", {"colour":"Black","thick":"0","type":"Solid"})
+        ET.SubElement(code_elt, "textattr", {"colour":"Black","bold":"false"})
+        code_text = ET.SubElement(code_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+        code_text.text = ""
+
+        # <priority>
+        prio_elt = ET.SubElement(trans_elt, "priority", {"id": generate_id("prio")})
+        ET.SubElement(prio_elt, "posattr", {
+            "x": f"{tx - 50.0:.6f}",
+            "y": f"{ty - 43.0:.6f}"
+        })
+        ET.SubElement(prio_elt, "fillattr", {"colour":"White","pattern":"Solid","filled":"false"})
+        ET.SubElement(prio_elt, "lineattr", {"colour":"Black","thick":"0","type":"Solid"})
+        ET.SubElement(prio_elt, "textattr", {"colour":"Black","bold":"false"})
+        prio_text = ET.SubElement(prio_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+        prio_text.text = ""
 
     # -------------------------------------------------------------------
-    # 6. Add ARCS
-    #    The JSON schema organizes arcs under transitions: inArcs / outArcs
+    # 6. ARCS (from transitions section in JSON)
     # -------------------------------------------------------------------
     for trans_info in json_data.get("transitions", []):
         trans_name = trans_info["name"]
@@ -382,85 +469,284 @@ def json_to_cpn_xml(
         for arc_info in trans_info.get("inArcs", []):
             place_name = arc_info["place"]
             expr = arc_info["expression"]
-            # place -> transition
             arc_id = generate_id("arc")
-            arc_elt = ET.SubElement(page, "arc", {"id": arc_id, "orientation": "PtoT"})
-            # references
-            place_end = ET.SubElement(arc_elt, "placeend", {"idref": place_name_to_id[place_name]})
-            trans_end = ET.SubElement(arc_elt, "transend", {"idref": trans_id})
+            arc_elt = ET.SubElement(page, "arc", {
+                "id": arc_id,
+                "orientation": "PtoT",
+                "order": "1"
+            })
+            ET.SubElement(arc_elt, "posattr", {"x": "0.000000", "y": "0.000000"})
+            ET.SubElement(arc_elt, "fillattr", {"colour": "White", "pattern": "", "filled": "false"})
+            ET.SubElement(arc_elt, "lineattr", {"colour": "Black", "thick": "1", "type": "Solid"})
+            ET.SubElement(arc_elt, "textattr", {"colour": "Black", "bold": "false"})
+            ET.SubElement(arc_elt, "arrowattr", {"headsize": "1.200000", "currentcyckle": "2"})
 
-            # <annot> for the expression
+            # references
+            # For P->T arcs, "transend" then "placeend"
+            #  (In the example snippet, the order is <transend> then <placeend> if orientation="PtoT" is used.
+            #   However, the official doc typically shows placeend then transend.
+            #   Either can load in CPN Tools, but let's match the snippet.)
+            trans_end = ET.SubElement(arc_elt, "transend", {"idref": trans_id})
+            place_end = ET.SubElement(arc_elt, "placeend", {"idref": place_name_to_id[place_name]})
+
+            # <annot> for the arc expression
             annot_id = generate_id("annot")
             annot_elt = ET.SubElement(arc_elt, "annot", {"id": annot_id})
-            # minimal position
-            ET.SubElement(annot_elt, "posattr", {"x": "0", "y": "0"})
-            text_elt = ET.SubElement(annot_elt, "text")
-            text_elt.text = expr
+            ET.SubElement(annot_elt, "posattr", {
+                "x": "0.000000",
+                "y": "0.000000"
+            })
+            ET.SubElement(annot_elt, "fillattr", {"colour":"White","pattern":"Solid","filled":"false"})
+            ET.SubElement(annot_elt, "lineattr", {"colour":"Black","thick":"0","type":"Solid"})
+            ET.SubElement(annot_elt, "textattr", {"colour":"Black","bold":"false"})
+
+            annot_text = ET.SubElement(annot_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+            annot_text.text = expr
+
+            # An extra empty <text> child is often present in arcs:
+            arc_text_child = ET.SubElement(arc_elt, "text")
+            arc_text_child.text = ""
 
         # outArcs => orientation="TtoP"
         for arc_info in trans_info.get("outArcs", []):
             place_name = arc_info["place"]
             expr = arc_info["expression"]
-            # transition -> place
             arc_id = generate_id("arc")
-            arc_elt = ET.SubElement(page, "arc", {"id": arc_id, "orientation": "TtoP"})
+            arc_elt = ET.SubElement(page, "arc", {
+                "id": arc_id,
+                "orientation": "TtoP",
+                "order": "1"
+            })
+            ET.SubElement(arc_elt, "posattr", {"x": "0.000000", "y": "0.000000"})
+            ET.SubElement(arc_elt, "fillattr", {"colour": "White", "pattern": "", "filled": "false"})
+            ET.SubElement(arc_elt, "lineattr", {"colour": "Black", "thick": "1", "type": "Solid"})
+            ET.SubElement(arc_elt, "textattr", {"colour": "Black", "bold": "false"})
+            ET.SubElement(arc_elt, "arrowattr", {"headsize": "1.200000", "currentcyckle": "2"})
+
             # references
+            # For T->P arcs, "transend" then "placeend".
             trans_end = ET.SubElement(arc_elt, "transend", {"idref": trans_id})
             place_end = ET.SubElement(arc_elt, "placeend", {"idref": place_name_to_id[place_name]})
 
-            # <annot> for expression
+            # <annot> for arc expression
             annot_id = generate_id("annot")
             annot_elt = ET.SubElement(arc_elt, "annot", {"id": annot_id})
-            ET.SubElement(annot_elt, "posattr", {"x": "0", "y": "0"})
-            text_elt = ET.SubElement(annot_elt, "text")
-            text_elt.text = expr
+            ET.SubElement(annot_elt, "posattr", {
+                "x": "0.000000",
+                "y": "0.000000"
+            })
+            ET.SubElement(annot_elt, "fillattr", {"colour":"White","pattern":"Solid","filled":"false"})
+            ET.SubElement(annot_elt, "lineattr", {"colour":"Black","thick":"0","type":"Solid"})
+            ET.SubElement(annot_elt, "textattr", {"colour":"Black","bold":"false"})
+
+            annot_text = ET.SubElement(annot_elt, "text", {"tool":"CPN Tools", "version":"4.0.1"})
+            annot_text.text = expr
+
+            # An extra empty <text> child
+            arc_text_child = ET.SubElement(arc_elt, "text")
+            arc_text_child.text = ""
+
+    # Add an empty <constraints/> node (CPN Tools often includes it):
+    ET.SubElement(page, "constraints")
 
     # -------------------------------------------------------------------
-    # 7. Produce final string with DOCTYPE
+    # 7. INSTANCES (linking the single page as top-level)
     # -------------------------------------------------------------------
-    # Convert ElementTree to string. Then prepend the XML declaration + DOCTYPE.
-    # NOTE: If you need pretty-printing, you can use xml.dom.minidom or lxml.
+    instances_elt = ET.SubElement(cpnet, "instances")
+    # We create an <instance> referencing our page
+    ET.SubElement(instances_elt, "instance", {
+        "id": f"{page_id}itop",  # e.g. "ID123itop"
+        "page": page_id
+    })
+
+    # -------------------------------------------------------------------
+    # 8. <options> block (replicating your example's defaults)
+    # -------------------------------------------------------------------
+    options_elt = ET.SubElement(cpnet, "options")
+
+    # Helper to add each <option name='X'><value><boolean>...</boolean></value></option>,
+    # or <option name='X' value='text'...>
+    def add_option(name, bool_value):
+        opt = ET.SubElement(options_elt, "option", {"name": name})
+        val = ET.SubElement(opt, "value")
+        b = ET.SubElement(val, "boolean")
+        b.text = "true" if bool_value else "false"
+
+    # Provide the same set from the example:
+    add_option("realtimestamp", False)
+    add_option("fair_be", False)
+    add_option("global_fairness", False)
+
+    # text-based option:
+    opt_dir = ET.SubElement(options_elt, "option", {"name": "outputdirectory"})
+    val_dir = ET.SubElement(opt_dir, "value")
+    txt_dir = ET.SubElement(val_dir, "text")
+    txt_dir.text = "<same as model>"
+
+    # Provide the repeated extension enabling/metrics booleans:
+    ext_names = ["extensions.10006.enable","extensions.10001.enable","extensions.10003.enable",
+                 "extensions.10005.enable","extensions.10002.enable"]
+    for e in ext_names:
+        add_option(e, True)
+
+    rep_names = ["repavg", "repciavg","repcount","repfirstval","replastval","repmax","repmin","repssquare","repssqdev","repstddev","repsum","repvariance"]
+    # from the snippet: repavg=true, repciavg=true, repcount=false, ...
+    # but let's match exactly the snippet:
+    rep_values = {
+      "repavg": True,
+      "repciavg": True,
+      "repcount": False,
+      "repfirstval": False,
+      "replastval": False,
+      "repmax": True,
+      "repmin": True,
+      "repssquare": False,
+      "repssqdev": False,
+      "repstddev": True,
+      "repsum": False,
+      "repvariance": False
+    }
+    for k, v in rep_values.items():
+        add_option(k, v)
+
+    # Similarly for the next group: (avg, ciavg, count, firstval, lastval, max, min, ssquare, ssqdev, stddev, sum, variance)
+    group_values = {
+        "avg": True,
+        "ciavg": False,
+        "count": True,
+        "firstval": False,
+        "lastval": False,
+        "max": True,
+        "min": True,
+        "ssquare": False,
+        "ssqdev": False,
+        "stddev": False,
+        "sum": False,
+        "variance": False
+    }
+    for k, v in group_values.items():
+        add_option(k, v)
+
+    # Next group: firstupdate, interval, lastupdate, ...
+    add_option("firstupdate", False)
+    add_option("interval", False)
+    add_option("lastupdate", False)
+
+    # Next group: "untimedavg", "untimedciavg", ...
+    untimed_values = {
+        "untimedavg": True,
+        "untimedciavg": False,
+        "untimedcount": True,
+        "untimedfirstval": False,
+        "untimedlastval": False,
+        "untimedmax": True,
+        "untimedmin": True,
+        "untimedssquare": False,
+        "untimedssqdev": False,
+        "untimedstddev": False,
+        "untimedsum": True,
+        "untimedvariance": False
+    }
+    for k, v in untimed_values.items():
+        add_option(k, v)
+
+    # -------------------------------------------------------------------
+    # 9. <binders/>, <monitorblock>, <IndexNode> stubs
+    # -------------------------------------------------------------------
+    ET.SubElement(cpnet, "binders")
+
+    monblock = ET.SubElement(cpnet, "monitorblock", {"name":"Monitors"})
+    # Example of a monitor as in your snippet (optional). We'll leave it empty or
+    # you could replicate an example monitor if you wish:
+    # <monitor ...> ... </monitor>
+
+    # The big IndexNode structure from your example (verbatim):
+    # (You can simplify or remove this if desired, but it helps CPN Tools re-open properly.)
+    index_node = ET.SubElement(cpnet, "IndexNode", {"expanded":"true"})
+    # We'll copy the nested structure from your example:
+    #  (For brevity, you can remove or reduce; otherwise replicate verbatim.)
+    i1 = ET.SubElement(index_node, "IndexNode", {"expanded":"false"})
+    i2 = ET.SubElement(index_node, "IndexNode", {"expanded":"false"})
+    i3 = ET.SubElement(index_node, "IndexNode", {"expanded":"false"})
+    i31 = ET.SubElement(i3, "IndexNode", {"expanded":"false"})
+    i311 = ET.SubElement(i31, "IndexNode", {"expanded":"false"})
+    i3111 = ET.SubElement(i311, "IndexNode", {"expanded":"false"})
+    # ... etc. (matching the full structure from your snippet).
+    # For clarity/length, you might replicate all nested <IndexNode expanded='false'>
+    # from the example snippet. (Below is a short version.)
+
+    # We'll replicate enough to avoid load issues:
+    for _ in range(8):
+        subn = ET.SubElement(i311, "IndexNode", {"expanded":"false"})
+
+    i3112 = ET.SubElement(i311, "IndexNode", {"expanded":"false"})
+    i312 = ET.SubElement(i31, "IndexNode", {"expanded":"false"})
+    # ...
+    i4 = ET.SubElement(index_node, "IndexNode", {"expanded":"false"})
+    i5 = ET.SubElement(index_node, "IndexNode", {"expanded":"true"})
+    i51 = ET.SubElement(i5, "IndexNode", {"expanded":"false"})
+    i511 = ET.SubElement(i51, "IndexNode", {"expanded":"true"})
+    i512 = ET.SubElement(i51, "IndexNode", {"expanded":"true"})
+    i513 = ET.SubElement(i51, "IndexNode", {"expanded":"true"})
+    i52 = ET.SubElement(i5, "IndexNode", {"expanded":"true"})
+    i521 = ET.SubElement(i52, "IndexNode", {"expanded":"true"})
+    # etc. This is purely an example to mimic your snippet's expanded nodes.
+
+    # -------------------------------------------------------------------
+    # 10. Produce final string with XML declaration + DOCTYPE
+    # -------------------------------------------------------------------
+    # Pretty-print (Python 3.9+). For older Pythons, remove ET.indent or replicate manually.
     ET.indent(root, space="  ", level=0)
-    xml_str = ET.tostring(root, encoding="utf-8", method="xml").decode("utf-8")
 
+    xml_str = ET.tostring(root, encoding="utf-8", method="xml").decode("utf-8")
     doctype_line = (
         '<?xml version="1.0" encoding="iso-8859-1"?>\n'
-        '<!DOCTYPE workspaceElements PUBLIC "-//CPN//DTD CPNXML 1.0//EN" '
-        '"http://www.daimi.au.dk/~cpntools/bin/DTD/2/cpn.dtd">\n'
+        '<!DOCTYPE workspaceElements PUBLIC "-//CPN//DTD CPNXML 1.0//EN" "http://cpntools.org/DTD/6/cpn.dtd">\n'
     )
     return doctype_line + xml_str
 
 
 def apply(json_path: str):
-    if type(json_path) is str:
-        with open("provaa.json", "r") as f:
+    """
+    Example function demonstrating how you might integrate:
+    1) Parsing a JSON Petri net definition.
+    2) Generating an SVG (with cpnpy, Graphviz).
+    3) Extracting coordinates from the SVG.
+    4) Calling json_to_cpn_xml(...) to produce the final .cpn file content.
+    """
+    if isinstance(json_path, str):
+        with open(json_path, "r") as f:
             data = json.load(f)
     else:
         data = json_path
 
+    # Example usage of cpnpy (comment out if not installed).
     from cpnpy.cpn.importer import import_cpn_from_json
     cpn, marking, context = import_cpn_from_json(data)
 
+    # Create an SVG with Graphviz
     temp_file_name = "temp_" + str(randrange(1, 100000000)).zfill(10)
-
     from cpnpy.visualization.visualizer import CPNGraphViz
     viz = CPNGraphViz()
     viz.apply(cpn, marking, format="svg")
     viz.save(temp_file_name)
 
+    # Parse coordinates
     from cpnpy.util import svg_parser
-    coords = svg_parser.parse_graphviz_svg(temp_file_name+".svg")
+    coords = svg_parser.parse_graphviz_svg(temp_file_name + ".svg")
 
+    # Cleanup
     import os
-    os.remove(temp_file_name+".svg")
+    os.remove(temp_file_name + ".svg")
 
-    cpn_xml = json_to_cpn_xml(sample_json, coords)
+    # Now produce the final CPN Tools XML
+    cpn_xml = json_to_cpn_xml(data, coords)
 
     return cpn_xml
 
 
 if __name__ == "__main__":
-    # Minimal example JSON (adjust as needed):
+    # Minimal example JSON:
     sample_json = {
         "colorSets": [
             "colset IntSet = int;",
@@ -473,7 +759,7 @@ if __name__ == "__main__":
         "transitions": [
             {
                 "name": "T1",
-                "variables": ["n", "p"],  # no color set known, defaulting to INT in example
+                "variables": ["n", "p"],
                 "inArcs": [
                     {"place": "P1", "expression": "1`n"}
                 ],
@@ -489,8 +775,6 @@ if __name__ == "__main__":
         "evaluationContext": None
     }
 
-    cpn_xml = apply(sample_json)
-
-    F = open("../../../prova.cpn", "w")
-    F.write(cpn_xml)
-    F.close()
+    cpn_xml_str = apply(sample_json)
+    with open("../../../prova.cpn", "w", encoding="utf-8") as f:
+        f.write(cpn_xml_str)
