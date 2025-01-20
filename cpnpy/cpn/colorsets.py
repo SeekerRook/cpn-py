@@ -52,6 +52,59 @@ class StringColorSet(ColorSet):
         return f"{name_str}StringColorSet{timed_str}"
 
 
+class BoolColorSet(ColorSet):
+    def is_member(self, value: Any) -> bool:
+        return isinstance(value, bool)
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}BoolColorSet{timed_str}"
+
+
+class UnitColorSet(ColorSet):
+    """
+    A 'unit' type often represents a single, trivial value (e.g. () in some languages).
+    For membership, we can check for exactly () or any other convention as needed.
+    """
+    def is_member(self, value: Any) -> bool:
+        return value == ()
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}UnitColorSet{timed_str}"
+
+
+class IntInfColorSet(ColorSet):
+    """
+    'intinf' is often used to denote arbitrary-precision integers.
+    In Python 3, all ints are arbitrary precision, so this is effectively the same as IntegerColorSet.
+    """
+    def is_member(self, value: Any) -> bool:
+        return isinstance(value, int)
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}IntInfColorSet{timed_str}"
+
+
+class TimeColorSet(ColorSet):
+    """
+    'time' could be interpreted in various ways.
+    Here we simply check if it's a numeric type (e.g., float or int) representing a time or timestamp.
+    Adjust logic as needed for real usage (e.g., Python datetime).
+    """
+    def is_member(self, value: Any) -> bool:
+        return isinstance(value, float) or isinstance(value, int)
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}TimeColorSet{timed_str}"
+
+
 class EnumeratedColorSet(ColorSet):
     def __init__(self, values: List[str], timed: bool = False, name: str = None):
         super().__init__(timed=timed, name=name)
@@ -99,6 +152,26 @@ class DictionaryColorSet(ColorSet):
         return f"{name_str}DictionaryColorSet{timed_str}"
 
 
+class ListColorSet(ColorSet):
+    """
+    A color set for lists, where each element must be a member of the underlying color set.
+    For "list int", we'd parse the underlying type and store it here.
+    """
+    def __init__(self, element_cs: ColorSet, timed: bool = False, name: str = None):
+        super().__init__(timed=timed, name=name)
+        self.element_cs = element_cs
+
+    def is_member(self, value: Any) -> bool:
+        if not isinstance(value, list):
+            return False
+        return all(self.element_cs.is_member(elem) for elem in value)
+
+    def __repr__(self):
+        timed_str = " timed" if self.timed else ""
+        name_str = f"{self.name + ' ' if self.name else ''}"
+        return f"{name_str}ListColorSet({repr(self.element_cs)}){timed_str}"
+
+
 # -----------------------------------------------------------------------------------
 # ColorSetParser with Timed Support
 # -----------------------------------------------------------------------------------
@@ -143,6 +216,7 @@ class ColorSetParser:
         if type_str.startswith("{") and type_str.endswith("}"):
             return self._parse_enumerated_type(type_str, timed)
 
+        # Direct primitive types
         if type_str == "int":
             return IntegerColorSet(timed=timed)
         if type_str == "real":
@@ -151,7 +225,22 @@ class ColorSetParser:
             return StringColorSet(timed=timed)
         if type_str == "dict":
             return DictionaryColorSet(timed=timed)
+        if type_str == "bool":
+            return BoolColorSet(timed=timed)
+        if type_str == "unit":
+            return UnitColorSet(timed=timed)
+        if type_str == "intinf":
+            return IntInfColorSet(timed=timed)
+        if type_str == "time":
+            return TimeColorSet(timed=timed)
 
+        # "list" type: "list int", "list bool", "list MyEnumeratedSet", etc.
+        if type_str.startswith("list "):
+            sub_type = type_str[len("list "):].strip()
+            sub_cs = self._parse_type(sub_type, False)
+            return ListColorSet(sub_cs, timed=timed)
+
+        # Product type
         if type_str.startswith("product(") and type_str.endswith(")"):
             inner = type_str[len("product("):-1].strip()
             comma_index = self._find_comma_at_top_level(inner)
@@ -191,6 +280,10 @@ class ColorSetParser:
         return EnumeratedColorSet(parsed_values, timed=timed)
 
     def _find_comma_at_top_level(self, s: str) -> int:
+        """
+        Finds a comma that is not nested within parentheses.
+        Returns the index of that comma or -1 if none is found at top level.
+        """
         level = 0
         for i, ch in enumerate(s):
             if ch == '(':
@@ -211,6 +304,11 @@ if __name__ == "__main__":
     colset MyInts = int;
     colset MyReals = real;
     colset MyDict = dict;
+    colset MyBools = bool timed;
+    colset MyUnit = unit;
+    colset MyBigInts = intinf;
+    colset MyTime = time;
+    colset MyListOfInts = list int;
     colset MyProduct = product(Colors, MyInts) timed;
     """
 
@@ -227,11 +325,20 @@ if __name__ == "__main__":
     print("MyInts.is_member('42'):", parsed['MyInts'].is_member('42'))
     print("MyReals.is_member(3.14):", parsed['MyReals'].is_member(3.14))
     print("MyReals.is_member('3.14'):", parsed['MyReals'].is_member('3.14'))
-
-    # Dictionary test: dict
     print("MyDict.is_member({'key': 'value'}):", parsed['MyDict'].is_member({'key': 'value'}))
     print("MyDict.is_member(42):", parsed['MyDict'].is_member(42))
+    print("MyBools.is_member(True):", parsed['MyBools'].is_member(True))
+    print("MyBools.is_member('True'):", parsed['MyBools'].is_member('True'))
+    print("MyUnit.is_member(()):", parsed['MyUnit'].is_member(()))
+    print("MyUnit.is_member('not-unit'):", parsed['MyUnit'].is_member('not-unit'))
+    print("MyBigInts.is_member(9999999999999999999999):", parsed['MyBigInts'].is_member(9999999999999999999999))
+    print("MyTime.is_member(10.5):", parsed['MyTime'].is_member(10.5))
+    print("MyTime.is_member('nope'):", parsed['MyTime'].is_member('nope'))
 
-    # Product test: product(Colors, MyInts)
+    # List test
+    print("MyListOfInts.is_member([1,2,3]):", parsed['MyListOfInts'].is_member([1,2,3]))
+    print("MyListOfInts.is_member(['1','2','3']):", parsed['MyListOfInts'].is_member(['1','2','3']))
+
+    # Product test
     print("MyProduct.is_member(('red', 10)):", parsed['MyProduct'].is_member(('red', 10)))
     print("MyProduct.is_member(('red', 'notint')):", parsed['MyProduct'].is_member(('red', 'notint')))
