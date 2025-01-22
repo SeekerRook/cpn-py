@@ -39,19 +39,71 @@ def json_to_cpn_xml(
         unique_counter += 1
         return f"ID{prefix}{unique_counter}"
 
+    import re
+
     def find_node_position(name: str) -> Tuple[float, float]:
         """
-        Given a place/transition name (as used in json_data),
-        look up the corresponding node in coords_data["nodes"]
-        (where 'title' == name), and return (x, y).
-
-        If not found, returns (0.0, 0.0).
+        Given a place/transition name, look up coords_data["nodes"] where 'title' == name,
+        and return the center (x, y). This version handles 'ellipse', 'rect', 'polygon',
+        and 'path' (by taking the bounding-box center).
         """
         for node in coords_data.get("nodes", []):
             if node.get("title") == name:
                 geom = node.get("geometry", {})
-                if geom.get("type") == "ellipse":
+                shape_type = geom.get("type", "")
+
+                if shape_type == "ellipse":
+                    # Center is (cx, cy)
                     return (geom.get("cx", 0.0), geom.get("cy", 0.0))
+
+                elif shape_type == "rect":
+                    # For a rectangle, compute the center:
+                    x = geom.get("x", 0.0) + geom.get("width", 0.0) / 2
+                    y = geom.get("y", 0.0) + geom.get("height", 0.0) / 2
+                    return (x, y)
+
+                elif shape_type == "polygon":
+                    # Some renderers produce a polygon for transitions.
+                    # We can average all polygon points to find the 'center':
+                    points = geom.get("points", [])
+                    if points:
+                        avg_x = sum(pt[0] for pt in points) / len(points)
+                        avg_y = sum(pt[1] for pt in points) / len(points)
+                        return (avg_x, avg_y)
+                    return (0.0, 0.0)
+
+                elif shape_type == "path":
+                    # Parse out all coordinate pairs from the 'd' string
+                    d_str = geom.get("d", "")
+
+                    # Regex to capture all pairs like 2101.65,-134.5 or -93.2,45
+                    pattern = r"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)"
+                    coords = re.findall(pattern, d_str)
+
+                    if not coords:
+                        return (0.0, 0.0)
+
+                    # Convert to floats
+                    x_vals = []
+                    y_vals = []
+                    for (sx, sy) in coords:
+                        x_vals.append(float(sx))
+                        y_vals.append(float(sy))
+
+                    # Compute bounding box
+                    min_x, max_x = min(x_vals), max(x_vals)
+                    min_y, max_y = min(y_vals), max(y_vals)
+
+                    # Return center of bounding box
+                    cx = 0.5 * (min_x + max_x)
+                    cy = 0.5 * (min_y + max_y)
+
+                    return (cx, cy)
+
+                # Fall-back if shape is unrecognized
+                return (0.0, 0.0)
+
+        # If not found at all, default to (0.0, 0.0)
         return (0.0, 0.0)
 
     def parse_cpn_colorset(cs_definition: str) -> (str, ET.Element):
