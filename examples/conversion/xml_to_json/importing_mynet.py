@@ -3,7 +3,7 @@ from cpnpy.cpn import importer
 from cpnpy.visualization import visualizer
 import json
 
-json_path = "../../../prova.json"
+json_path = "../../../xml_to_json.json"
 
 if __name__ == "__main__":
     dct = cpn_xml_to_json.cpn_xml_to_json("../../../files/other/xml/mynet.cpn")

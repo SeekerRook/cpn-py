@@ -4,8 +4,8 @@ from cpnpy.cpn import exporter
 from cpnpy.util.conversion import json_to_cpn_xml
 
 
-json_path = "../../../prova.json"
-xml_path = "../../../prova.cpn"
+json_path = "../../../auto_disc1.json"
+xml_path = "../../../auto_disc1.cpn"
 
 
 if __name__ == "__main__":
