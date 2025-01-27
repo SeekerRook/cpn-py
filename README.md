@@ -18,7 +18,7 @@ You can install `cpnpy` from Pypi using the command:
 pip install -U cnpy
 ```
 
-You can install `cpnpy` directly from source. If you have a proper `setup.py`, you could run:
+You can install `cpnpy` directly from source:
 ```bash
 pip install -e .
 ```
@@ -486,7 +486,24 @@ This approach helps you *exhaustively* understand your CPN’s behavior, includi
 
 ---
 
-Below is an example **summary section** you can place in `README.md`. It highlights the main points about **Hierarchical Petri Nets** (HCPNs) and references a separate file (e.g., `docs_HCPN.md`) for detailed information. This summary contains **no code** and is suitable for a high-level overview:
+## Graphical Interface
+
+`cpnpy` provides a Streamlit-based graphical interface for editing and simulating Colored Petri Nets interactively. This interface allows you to:
+
+- **Import** an existing CPN from JSON
+- **Create** color sets from scratch
+- **Add** places, transitions, arcs, and tokens
+- **Fire** transitions or **advance** the global clock
+- **Visualize** the current marking in a Graphviz diagram
+- **Export** your CPN to JSON
+
+### How to Start
+
+1. **Navigate** to the root of your project directory (the directory containing the `cpnpy/` folder).
+2. **Run** the following command:
+
+   ```bash
+   streamlit run .\cpnpy\home.py
 
 ---
 
