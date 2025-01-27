@@ -14,16 +14,40 @@ if cpnpy_parent not in sys.path:
 # 2) Now import streamlit
 import streamlit as st
 
-# 3) Import your modules
+# -------------------------------------------------------
+# HELPER FUNCTION: parse user-supplied binding
+# -------------------------------------------------------
+def parse_binding_to_dict(binding_str: str) -> dict:
+    """
+    Given a string like "x=42, y='red'", parse it into a dict: {"x": 42, "y": "red"}.
+    """
+    # Example: x=42, y='red'
+    # 1) split by commas -> ["x=42", " y='red'"]
+    # 2) split each by '='
+    # 3) left side is var name, right side is Python literal
+    result = {}
+    parts = binding_str.split(',')
+    for part in parts:
+        part = part.strip()
+        if '=' not in part:
+            raise ValueError(f"Missing '=' in part '{part}'")
+        var_name, val_str = part.split('=', 1)
+        var_name = var_name.strip()
+        val_str = val_str.strip()
+        # Evaluate the right side as a Python literal
+        parsed_val = eval(val_str)  # e.g., eval("42") -> 42, eval("'red'") -> "red"
+        result[var_name] = parsed_val
+    return result
+
+# 3) Import your Petri net modules
 from cpnpy.cpn.cpn_imp import Place, Transition, Arc
 from cpnpy.interface.draw import draw_cpn
 from cpnpy.interface.simulation import (
     step_transition,
     advance_clock,
-    get_enabled_transitions,
+    get_enabled_transitions
 )
 from cpnpy.interface.import_export import export_cpn_ui
-
 
 def init_session_state():
     """Ensure session state is ready."""
@@ -35,7 +59,6 @@ def init_session_state():
         st.session_state["colorsets"] = {}
     if "context" not in st.session_state:
         st.session_state["context"] = None
-
 
 init_session_state()
 
@@ -183,10 +206,43 @@ with st.expander("Marking Details", expanded=False):
 st.subheader("Simulation Controls")
 enabled_list = get_enabled_transitions(cpn, marking, context)
 if enabled_list:
-    st.write("Enabled transitions:", enabled_list)
+    st.write("**Enabled transitions** (with any valid binding):", enabled_list)
     chosen_transition = st.selectbox("Choose a transition to fire", enabled_list, key="fire_transition_select")
+
+    # --- Manual binding support ---
+    use_manual_binding = st.checkbox("Use a Manual Binding?", value=False)
+    binding_str = ""
+    if use_manual_binding:
+        # Let user specify "x=42, y='red'" etc.
+        binding_str = st.text_input(
+            label="Binding (e.g. x=42, y='red')",
+            placeholder="x=42, y='red'"
+        )
+
     if st.button("Fire Transition"):
-        step_transition(cpn, chosen_transition, marking, context)
+        binding = None
+        if use_manual_binding and binding_str.strip():
+            try:
+                binding = parse_binding_to_dict(binding_str)
+            except Exception as e:
+                st.warning(f"Could not parse binding: {e}")
+                binding = None
+
+        if binding:
+            # Fire transition with user-specified binding
+            t_obj = cpn.get_transition_by_name(chosen_transition)
+            if not t_obj:
+                st.error("Transition not found (unexpected).")
+            else:
+                # Check if enabled with that binding
+                if cpn.is_enabled(t_obj, marking, context, binding=binding):
+                    cpn.fire_transition(t_obj, marking, context, binding=binding)
+                    st.success(f"Fired transition '{chosen_transition}' with binding {binding}.")
+                else:
+                    st.warning(f"Transition '{chosen_transition}' not enabled with binding {binding}.")
+        else:
+            # Fallback: no manual binding
+            step_transition(cpn, chosen_transition, marking, context)
 else:
     st.write("No transitions are enabled at the moment.")
 
@@ -197,12 +253,8 @@ with colA:
         advance_clock(cpn, marking)
 
 with colB:
-    # NEW BUTTON: "Update Visualized Information"
     if st.button("Update Visualized Information"):
-        # This button does nothing except cause the script to re-run,
-        # which will re-draw the net and show the latest marking.
         st.info("Visualization and Marking updated!")
-
 
 # Export
 st.subheader("Export CPN")
