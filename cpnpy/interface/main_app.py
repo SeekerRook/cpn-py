@@ -1,27 +1,33 @@
 import sys
 import os
+import streamlit as st
 
-# ---------------------- Add Project Root to sys.path ----------------------
-# Determine the current file's directory
+# -------------------- Add Project Root to sys.path --------------------
+# This ensures Python can locate the cpnpy package when you run:
+#   streamlit run cpnpy/interface/main_app.py
+# Adjust the relative paths if your directory structure differs.
 current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Assume the project root is two levels up (adjust if your structure is different)
 project_root = os.path.abspath(os.path.join(current_dir, '..', '..'))
-
-# Add the project root to sys.path if it's not already there
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 
-import streamlit as st
 from cpnpy.cpn.colorsets import ColorSetParser
 from cpnpy.cpn.cpn_imp import CPN, Marking, EvaluationContext, Place, Transition, Arc
+
+# Import the new import/export UI helpers
+from cpnpy.interface.import_export import import_cpn_ui, export_cpn_ui
+
 from cpnpy.interface.draw import draw_cpn
-from cpnpy.interface.simulation import step_transition, advance_clock, get_enabled_transitions
+from cpnpy.interface.simulation import (
+    step_transition,
+    advance_clock,
+    get_enabled_transitions,
+)
 
 
 def init_session_state():
-    """Initialize Streamlit session state variables."""
+    """Initialize Streamlit session state variables if not present."""
     if "color_definitions" not in st.session_state:
         st.session_state["color_definitions"] = ""
     if "colorsets" not in st.session_state:
@@ -53,11 +59,12 @@ def add_place():
     place_name = st.session_state["new_place_name"]
     cs_name = st.session_state["new_place_colorset"]
     colorsets = st.session_state["colorsets"]
+
     if not place_name:
         st.warning("Place name cannot be empty.")
         return
     if cs_name not in colorsets:
-        st.warning(f"Colorset '{cs_name}' not found. Please define it first.")
+        st.warning(f"ColorSet '{cs_name}' not found. Please define it first.")
         return
 
     # Create and add the place
@@ -83,7 +90,12 @@ def add_transition():
     except ValueError:
         delay_val = 0
 
-    t = Transition(t_name, guard_expr if guard_expr.strip() else None, variables, delay_val)
+    t = Transition(
+        t_name,
+        guard_expr.strip() if guard_expr.strip() else None,
+        variables,
+        delay_val
+    )
     st.session_state["cpn"].add_transition(t)
     st.success(f"Transition '{t_name}' added.")
 
@@ -124,26 +136,28 @@ def add_arc():
 
 
 def add_tokens_to_place():
+    """Add tokens to a place in the current marking."""
     place_name = st.session_state["token_place_name"]
     token_val_str = st.session_state["token_value"]
-    try:
-        place = st.session_state["cpn"].get_place_by_name(place_name)
-        if not place:
-            st.warning(f"Place '{place_name}' does not exist.")
-            return
 
-        # Try to evaluate token_val_str as Python literal
-        # or fallback as string
+    # Attempt to parse the token value as a Python literal
+    try:
         token_value = eval(token_val_str)
     except:
-        token_value = token_val_str  # fallback as raw string
+        token_value = token_val_str  # fallback as raw string if eval fails
 
-    # Validate membership in place's colorset if needed
-    if not place.colorset.is_member(token_value):
-        st.warning(f"Value {token_value} not in color set {place.colorset}")
+    cpn = st.session_state["cpn"]
+    place = cpn.get_place_by_name(place_name)
+    if not place:
+        st.warning(f"Place '{place_name}' does not exist.")
         return
 
-    # For timed places, we can do an optional "timestamp" input
+    # Validate membership if desired
+    if not place.colorset.is_member(token_value):
+        st.warning(f"Value {token_value} is not a member of color set {place.colorset}")
+        return
+
+    # Timestamp
     timestamp = st.session_state["token_timestamp"]
     try:
         ts_val = int(timestamp)
@@ -155,13 +169,18 @@ def add_tokens_to_place():
 
 
 def remove_tokens_from_place():
+    """Remove tokens from a place in the current marking."""
     place_name = st.session_state["token_place_name_remove"]
     token_val_str = st.session_state["token_value_remove"]
+
+    cpn = st.session_state["cpn"]
+    place = cpn.get_place_by_name(place_name)
+    if not place:
+        st.warning(f"Place '{place_name}' does not exist.")
+        return
+
+    # Attempt to parse the token value
     try:
-        place = st.session_state["cpn"].get_place_by_name(place_name)
-        if not place:
-            st.warning(f"Place '{place_name}' does not exist.")
-            return
         token_value = eval(token_val_str)
     except:
         token_value = token_val_str
@@ -178,22 +197,44 @@ def update_context():
     """Update the user's custom context code."""
     user_code = st.session_state["context_code"]
     try:
-        st.session_state["context"] = EvaluationContext(user_code=user_code)
+        # We store the user's original code in a variable so the exporter can detect it
+        ctx = EvaluationContext(user_code=user_code)
+        # Tag the code as original so exporter can handle it
+        ctx.env["__original_user_code__"] = user_code
+        st.session_state["context"] = ctx
         st.success("Evaluation context updated successfully!")
     except Exception as e:
         st.error(f"Error updating context: {e}")
 
 
 def main():
+    """
+    The main function for running the Streamlit app. It orchestrates:
+    1. Session state initialization
+    2. Color set parsing
+    3. User context code
+    4. Net (Place/Transition/Arc) creation
+    5. Marking management (adding/removing tokens)
+    6. Import/Export of a CPN
+    7. Net visualization & simulation controls
+    """
     st.title("Colored Petri Net (CPN) Streamlit Interface")
 
+    # 1. Initialize session state
     init_session_state()
 
+    # 2. Color set definitions
     st.sidebar.header("1. Color Sets")
-    st.sidebar.text_area("Color Set Definitions (CPN-Tools-like syntax):",
-                         key="color_definitions",
-                         height=150,
-                         placeholder="e.g.\ncolset MyInt = int;\ncolset MyColors = { 'red', 'green' } timed;")
+    st.sidebar.text_area(
+        "Color Set Definitions (CPN-Tools-like syntax):",
+        key="color_definitions",
+        height=150,
+        placeholder=(
+            "e.g.\n"
+            "colset MyInt = int;\n"
+            "colset MyColors = { 'red', 'green' } timed;"
+        )
+    )
     if st.sidebar.button("Parse Color Sets"):
         parse_colorsets()
 
@@ -203,21 +244,28 @@ def main():
             for name, cs in st.session_state["colorsets"].items():
                 st.write(f"- **{name}**: {repr(cs)}")
 
+    # 3. User context code
     st.sidebar.header("2. User Context Code (Optional)")
-    st.sidebar.text_area("Custom Python code (functions, etc.):",
-                         key="context_code",
-                         height=150,
-                         placeholder="def double(n):\n    return 2*n")
+    st.sidebar.text_area(
+        "Custom Python code (functions, etc.):",
+        key="context_code",
+        height=150,
+        placeholder="def double(n):\n    return 2*n"
+    )
     if st.sidebar.button("Update Context"):
         update_context()
 
+    # 4. Define Net Elements
     st.sidebar.header("3. Define Net Elements")
+
+    # Add Place
     st.sidebar.subheader("Add Place")
     st.sidebar.text_input("Place Name", key="new_place_name", placeholder="e.g. P1")
     st.sidebar.text_input("Colorset Name", key="new_place_colorset", placeholder="e.g. MyInt")
     if st.sidebar.button("Add Place"):
         add_place()
 
+    # Add Transition
     st.sidebar.subheader("Add Transition")
     st.sidebar.text_input("Transition Name", key="new_transition_name", placeholder="e.g. T1")
     st.sidebar.text_input("Guard Expression", key="new_transition_guard", placeholder="e.g. x > 10")
@@ -226,14 +274,18 @@ def main():
     if st.sidebar.button("Add Transition"):
         add_transition()
 
+    # Add Arc
     st.sidebar.subheader("Add Arc")
-    st.sidebar.text_input("Arc Source (Place or Transition name)", key="new_arc_source", placeholder="e.g. P1 or T1")
-    st.sidebar.text_input("Arc Target (Place or Transition name)", key="new_arc_target", placeholder="e.g. T1 or P2")
+    st.sidebar.text_input("Arc Source (Place or Transition name)", key="new_arc_source", placeholder="P1 or T1")
+    st.sidebar.text_input("Arc Target (Place or Transition name)", key="new_arc_target", placeholder="T1 or P2")
     st.sidebar.text_input("Arc Expression", key="new_arc_expr", placeholder="e.g. x, (x,'hello') @+5, etc.")
     if st.sidebar.button("Add Arc"):
         add_arc()
 
+    # 5. Marking Management
     st.sidebar.header("4. Marking Management")
+
+    # Add token
     st.sidebar.subheader("Add Token")
     st.sidebar.text_input("Place name", key="token_place_name", placeholder="e.g. P1")
     st.sidebar.text_input("Token value (Python literal or string)", key="token_value", placeholder="42 or 'red'")
@@ -241,13 +293,22 @@ def main():
     if st.sidebar.button("Add Token"):
         add_tokens_to_place()
 
+    # Remove token
     st.sidebar.subheader("Remove Token")
     st.sidebar.text_input("Place name", key="token_place_name_remove", placeholder="e.g. P1")
     st.sidebar.text_input("Token value (Python literal or string)", key="token_value_remove", placeholder="42 or 'red'")
     if st.sidebar.button("Remove Token"):
         remove_tokens_from_place()
 
-    # Main area
+    # 6. Import/Export
+    st.sidebar.header("5. Import / Export")
+    with st.sidebar.expander("Import CPN"):
+        import_cpn_ui()
+    with st.sidebar.expander("Export CPN"):
+        export_cpn_ui()
+
+    # MAIN DISPLAY AREA
+
     st.subheader("Current CPN Structure & Marking")
     cpn = st.session_state["cpn"]
     marking = st.session_state["marking"]
@@ -259,7 +320,7 @@ def main():
     g = draw_cpn(cpn, marking)
     st.graphviz_chart(g)
 
-    # Show raw marking details
+    # Show marking details
     with st.expander("Marking Details", expanded=False):
         st.text(repr(marking))
 
@@ -279,7 +340,9 @@ def main():
 
     st.write("---")
     st.write(
-        "**Tip**: If no transitions are enabled, you might need to add tokens or advance the clock if there are future-timestamped tokens.")
+        "**Tip**: If no transitions are enabled, you might need to add tokens or "
+        "advance the clock if there are future-timestamped tokens."
+    )
 
 
 if __name__ == "__main__":
