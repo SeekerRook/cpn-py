@@ -486,6 +486,22 @@ This approach helps you *exhaustively* understand your CPN’s behavior, includi
 
 ---
 
+## Interoperability with CPN Tools (CPN XML)
+
+`cpnpy` offers **conversion** support for importing CPN Tools’ XML files into the library’s JSON-based format, as well as generating a **stub** CPN XML from `cpnpy` JSON. This two-way conversion enables you to leverage the original CPN Tools environment while working with `cpnpy`’s Python-based simulation framework:
+
+1. **From CPN XML to JSON:**  
+   - The XML structure (including places, transitions, and arcs) is mapped to the `cpnpy` JSON formalism. 
+   - Since CPN Tools uses **Standard ML** for its guards and arc expressions, these expressions must be translated into **Python**. To assist with this, `cpnpy` can invoke a **Large Language Model** (via utility functions in `cpnpy.util.llm_json_fixing`) to attempt an automatic conversion of Standard ML snippets into Python code.  
+   - **Example**: See [`examples/conversion/xml_to_json/importing_mynet.py`](examples/conversion/xml_to_json/importing_mynet.py) for a working script that demonstrates how to import an original CPN Tools XML file into a JSON definition suitable for `cpnpy`.
+
+2. **From JSON to CPN XML (Stub):**  
+   - You can also produce a minimal CPN Tools XML file from a `cpnpy` JSON definition. 
+   - This is a “stub” XML that usually requires **further manual editing** if your workflow needs advanced, tool-specific CPN XML features that exceed the scope of the JSON schema.  
+   - **Example**: See [`examples/conversion/json_to_xml/auto_discovery.py`](examples/conversion/json_to_xml/auto_discovery.py) for an end-to-end example of exporting `cpnpy` JSON to CPN XML.
+
+---
+
 ## Graphical Interface
 
 `cpnpy` provides a Streamlit-based graphical interface for editing and simulating Colored Petri Nets interactively. This interface allows you to:
