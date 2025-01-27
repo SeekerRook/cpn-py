@@ -35,13 +35,15 @@ def fix_json(data):
 
 
 if __name__ == "__main__":
+    json_path = "../../../output.json"
+
     from cpnpy.cpn import importer, exporter
     from cpnpy.util.conversion import cpn_xml_to_json
 
     cpn, marking, context = importer.import_cpn_from_json(cpn_xml_to_json.cpn_xml_to_json("../../../files/other/xml/mynet.cpn"))
-    exporter.export_cpn_to_json(cpn, marking, context, "../../../output.json")
+    exporter.export_cpn_to_json(cpn, marking, context, json_path)
 
-    stru = json.load(open("../../../output.json", "r"))
+    stru = json.load(open(json_path, "r"))
 
     stru2 = fix_json(stru)
     print(stru2)
