@@ -24,6 +24,7 @@ from cpnpy.interface.simulation import (
 )
 from cpnpy.interface.import_export import export_cpn_ui
 
+
 def init_session_state():
     """Ensure session state is ready."""
     if "cpn" not in st.session_state:
@@ -34,6 +35,7 @@ def init_session_state():
         st.session_state["colorsets"] = {}
     if "context" not in st.session_state:
         st.session_state["context"] = None
+
 
 init_session_state()
 
@@ -188,8 +190,19 @@ if enabled_list:
 else:
     st.write("No transitions are enabled at the moment.")
 
-if st.button("Advance Global Clock"):
-    advance_clock(cpn, marking)
+colA, colB = st.columns(2)
+
+with colA:
+    if st.button("Advance Global Clock"):
+        advance_clock(cpn, marking)
+
+with colB:
+    # NEW BUTTON: "Update Visualized Information"
+    if st.button("Update Visualized Information"):
+        # This button does nothing except cause the script to re-run,
+        # which will re-draw the net and show the latest marking.
+        st.info("Visualization and Marking updated!")
+
 
 # Export
 st.subheader("Export CPN")
