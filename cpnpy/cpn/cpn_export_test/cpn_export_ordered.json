@@ -1,0 +1,108 @@
+{
+  "colorSets": [
+    "colset STRING = string;",
+    "colset BASIC_ENUM = { 'A', 'B' };",
+    "colset LIST_ENUM = list BASIC_ENUM;",
+    "colset INT = int timed;",
+    "colset PAIR = product(INT, STRING) timed;",
+    "colset CS0 = { 'X', 'Y' } timed;"
+  ],
+  "places": [
+    {
+      "name": "P_Int",
+      "colorSet": "INT"
+    },
+    {
+      "name": "P_Pair",
+      "colorSet": "PAIR"
+    },
+    {
+      "name": "P_List",
+      "colorSet": "LIST_ENUM"
+    },
+    {
+      "name": "P_Prog",
+      "colorSet": "CS0"
+    },
+    {
+      "name": "P_Str",
+      "colorSet": "STRING"
+    }
+  ],
+  "transitions": [
+    {
+      "name": "T1",
+      "inArcs": [
+        {
+          "place": "P_Int",
+          "expression": "x"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "P_Pair",
+          "expression": "(x, 'processed') @+ 5"
+        },
+        {
+          "place": "P_Str",
+          "expression": "'original was ' + str(x)"
+        }
+      ],
+      "guard": "x > 10",
+      "variables": [
+        "x"
+      ],
+      "transitionDelay": 2
+    },
+    {
+      "name": "T2",
+      "inArcs": [
+        {
+          "place": "P_List",
+          "expression": "l"
+        }
+      ],
+      "outArcs": [
+        {
+          "place": "P_Prog",
+          "expression": "['X'] @+ 1"
+        }
+      ],
+      "variables": [
+        "l"
+      ]
+    }
+  ],
+  "initialMarking": {
+    "P_Int": {
+      "tokens": [
+        5,
+        12
+      ],
+      "timestamps": [
+        0,
+        2
+      ]
+    },
+    "P_List": {
+      "tokens": [
+        [
+          "A"
+        ],
+        [
+          "A",
+          "B"
+        ]
+      ]
+    },
+    "P_Prog": {
+      "tokens": [
+        "Y"
+      ],
+      "timestamps": [
+        10
+      ]
+    }
+  },
+  "evaluationContext": "cpn_export_test\\user_code_exported.py"
+}

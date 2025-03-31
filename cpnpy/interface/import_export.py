@@ -77,14 +77,15 @@ def export_cpn_ui():
     if st.button("Export CPN in JSON"):
         try:
             # exporter returns a dict representing the JSON structure
-            exported_json = export_cpn_to_json(
+            export_cpn_to_json(
                 cpn=cpn,
                 marking=marking,
                 context=context,
                 output_json_path=filename,  # not actually writing to disk except for references
                 output_py_path=None         # or "exported_user_code.py", etc.
             )
-            exported_str = json.dumps(exported_json, indent=2)
+
+            exported_str = open(filename, "r").read()
 
             # Provide a download button
             st.download_button(
@@ -97,29 +98,21 @@ def export_cpn_ui():
         except Exception as e:
             st.error(f"Error exporting CPN: {e}")
 
-    if st.button("Export CPN in XLM (stub)"):
+    if st.button("Export CPN in XML (stub)"):
         try:
             # exporter returns a dict representing the JSON structure
-            exported_json = export_cpn_to_json(
+            export_cpn_to_json(
                 cpn=cpn,
                 marking=marking,
                 context=context,
                 output_json_path=filename,  # not actually writing to disk except for references
                 output_py_path=None         # or "exported_user_code.py", etc.
             )
-            exported_str = json.dumps(exported_json, indent=2)
-
-            from tempfile import NamedTemporaryFile
-            F = NamedTemporaryFile(suffix=".json")
-            F.close()
-            F = open(F.name, "w")
-            F.write(exported_str)
-            F.close()
 
             from cpnpy.util.conversion import json_to_cpn_xml
-            cpn_xml = json_to_cpn_xml.apply(F.name)
+            cpn_xml = json_to_cpn_xml.apply(filename)
 
-            filename = filename.replace(".json", ".xml")
+            filename = filename.replace(".json", ".cpn")
 
             # Provide a download button
             st.download_button(

@@ -1,7 +1,8 @@
+# <<EXPORTER MODIFIED>>
 import json
 import os
-from collections import Counter
-from typing import Any, Dict, List, Optional, Union
+from collections import Counter, OrderedDict # Using OrderedDict for explicit order guarantee (safe for older Python)
+from typing import Any, Dict, List, Optional, Set, Union
 
 # Import the CPN classes from your existing cpnpy structure
 from cpnpy.cpn.cpn_imp import (
@@ -33,29 +34,91 @@ from cpnpy.cpn.colorsets import (
 )
 
 # -----------------------------------------------------------------------------------
-# Exporter functions
+# Helper function to find all unique colorsets recursively
+# -----------------------------------------------------------------------------------
+def find_all_colorsets(cpn: CPN) -> Set[ColorSet]:
+    """ Gathers all unique ColorSet instances used in the CPN places, including constituents. """
+    all_unique_colorsets = set()
+    processed_in_this_call = set() # To avoid redundant processing within this function call
+
+    initial_colorsets = {p.colorset for p in cpn.places}
+
+    for initial_cs in initial_colorsets:
+        stack = [initial_cs]
+        while stack:
+            cs = stack.pop()
+            if cs in processed_in_this_call:
+                continue
+            processed_in_this_call.add(cs)
+            all_unique_colorsets.add(cs)
+
+            # Add constituents to the stack for processing
+            if isinstance(cs, ProductColorSet):
+                if cs.cs1 not in processed_in_this_call:
+                    stack.append(cs.cs1)
+                if cs.cs2 not in processed_in_this_call:
+                    stack.append(cs.cs2)
+            elif isinstance(cs, ListColorSet):
+                if cs.element_cs not in processed_in_this_call:
+                    stack.append(cs.element_cs)
+            # Add other composite types here if they exist
+
+    return all_unique_colorsets
+
+# -----------------------------------------------------------------------------------
+# Exporter functions (Modified)
 # -----------------------------------------------------------------------------------
 
 def generate_color_set_definitions(cpn: CPN):
     """
     Generate definitions for all distinct color sets used in the CPN, using the types
-    from colorsets.py. Returns a tuple (colorset_to_name_map, name_to_definition_map),
+    from colorsets.py. Prioritizes original names and preserves logical dependency order.
+
+    Returns a tuple (colorset_to_name_map, name_to_definition_map),
     where:
-      - colorset_to_name_map: Dict[ColorSet, str] (mapping each ColorSet instance to a generated name)
-      - name_to_definition_map: Dict[str, str] (mapping each generated name to a 'colset' definition string)
+      - colorset_to_name_map: Dict[ColorSet, str] (mapping each ColorSet instance to its final name)
+      - name_to_definition_map: OrderedDict[str, str] (mapping each final name to its 'colset' definition string,
+                                                     preserving insertion order)
     """
     colorset_to_name = {}
-    name_to_def = {}
+    # Use OrderedDict to guarantee insertion order reflects dependency resolution
+    name_to_def = OrderedDict()
+    # Keep track of names used to prevent clashes if different objects have the same original name
+    # or if a generated name clashes with an original one.
+    used_definition_names = set()
+    generated_name_counter = 0
+
+    def get_unique_generated_name():
+        nonlocal generated_name_counter
+        while True:
+            name = f"CS{generated_name_counter}"
+            generated_name_counter += 1
+            if name not in used_definition_names:
+                return name
 
     def define_colorset(cs: ColorSet) -> str:
-        # If already defined, return the existing name
+        nonlocal generated_name_counter
+        # If this specific ColorSet instance is already defined, return its assigned name
         if cs in colorset_to_name:
             return colorset_to_name[cs]
 
-        assigned_name = f"CS{len(colorset_to_name)}"
+        # --- Determine the name for this colorset ---
+        assigned_name = None
+        # Prefer original name if available and not already used for a *different* object
+        if cs.name is not None and cs.name not in used_definition_names:
+            assigned_name = cs.name
+        else:
+            # Either no original name, or the original name is already taken. Generate one.
+            assigned_name = get_unique_generated_name()
+            # If cs.name existed but clashed, we might want to log a warning here.
+
+        # Mark this name as used for definitions and map the object to the name
+        used_definition_names.add(assigned_name)
         colorset_to_name[cs] = assigned_name
 
+        # --- Generate the definition string ---
         timed_str = " timed" if cs.timed else ""
+        base_def = ""
 
         # Handle each known color set subclass
         if isinstance(cs, IntegerColorSet):
@@ -75,27 +138,37 @@ def generate_color_set_definitions(cpn: CPN):
         elif isinstance(cs, DictionaryColorSet):
             base_def = f"colset {assigned_name} = dict{timed_str};"
         elif isinstance(cs, EnumeratedColorSet):
-            # e.g.: colset X = { 'red', 'green', 'blue' } timed;
             enumerations = ", ".join(f"'{v}'" for v in cs.values)
             base_def = f"colset {assigned_name} = {{ {enumerations} }}{timed_str};"
         elif isinstance(cs, ProductColorSet):
+            # *** Recursive call ensures constituents are defined first ***
             cs1_name = define_colorset(cs.cs1)
             cs2_name = define_colorset(cs.cs2)
-            # e.g. colset X = product(CS0, CS1) timed;
             base_def = f"colset {assigned_name} = product({cs1_name}, {cs2_name}){timed_str};"
         elif isinstance(cs, ListColorSet):
+            # *** Recursive call ensures constituent is defined first ***
             sub_name = define_colorset(cs.element_cs)
-            # e.g. colset X = list CS0 timed;
             base_def = f"colset {assigned_name} = list {sub_name}{timed_str};"
         else:
-            raise ValueError(f"Unknown ColorSet type: {cs}")
+            # Clean up potentially assigned name if we error out
+            if assigned_name in used_definition_names:
+                 used_definition_names.remove(assigned_name)
+            if cs in colorset_to_name:
+                 del colorset_to_name[cs]
+            raise ValueError(f"Unknown ColorSet type during export: {type(cs)}")
 
+        # Add the definition to the ordered dictionary *after* constituents are processed
         name_to_def[assigned_name] = base_def
         return assigned_name
 
-    # Define a colorset name/definition for every place in the CPN
-    for p in cpn.places:
-        define_colorset(p.colorset)
+    # --- Main part of generate_color_set_definitions ---
+    # 1. Find all unique ColorSet objects (including constituents)
+    all_cs_objects = find_all_colorsets(cpn)
+
+    # 2. Define each unique colorset. The recursive calls in define_colorset
+    #    will handle dependencies and ensure correct insertion order into name_to_def.
+    for cs_obj in all_cs_objects:
+        define_colorset(cs_obj) # Call ensures it and its dependencies are defined
 
     return colorset_to_name, name_to_def
 
@@ -109,18 +182,24 @@ def export_cpn_to_json(
 ):
     """
     Exports a given CPN, Marking, and optional EvaluationContext to a JSON file.
+    Preserves original ColorSet names and logical definition order.
     Also dumps user-provided Python code (if any) to output_py_path and references
     that file in the resulting JSON for future re-import or usage.
     """
-    # Generate color set definitions
+    # Generate color set definitions (name_to_def is now an OrderedDict)
     cs_to_name, name_to_def = generate_color_set_definitions(cpn)
 
     # Places
     places_json = []
     for p in cpn.places:
+        # Use the generated map to find the correct name (original or generated)
+        cs_name = cs_to_name.get(p.colorset)
+        if cs_name is None:
+             # This should ideally not happen if find_all_colorsets worked correctly
+             raise RuntimeError(f"Failed to find a mapped name for colorset of place {p.name}")
         places_json.append({
             "name": p.name,
-            "colorSet": cs_to_name[p.colorset]
+            "colorSet": cs_name
         })
 
     # Transitions (also gather arcs here)
@@ -128,6 +207,7 @@ def export_cpn_to_json(
     for t in cpn.transitions:
         in_arcs = []
         out_arcs = []
+        # It's more efficient to iterate arcs once and check source/target type
         for arc in cpn.arcs:
             if arc.target == t and isinstance(arc.source, Place):
                 in_arcs.append({
@@ -147,6 +227,7 @@ def export_cpn_to_json(
         }
         if t.guard_expr is not None:
             t_json["guard"] = t.guard_expr
+        # Ensure variables is only added if it's not empty
         if t.variables:
             t_json["variables"] = t.variables
         if t.transition_delay != 0:
@@ -157,93 +238,205 @@ def export_cpn_to_json(
     # Initial Marking
     initial_marking = {}
     for pname, ms in marking._marking.items():
+        # Ensure place exists in the CPN model before adding marking
+        place = cpn.get_place_by_name(pname)
+        if not place:
+            print(f"Warning: Marking found for place '{pname}' which is not in the CPN model. Skipping.")
+            continue
+
+        # Extract tokens and timestamps correctly from Multiset
         tokens = [tok.value for tok in ms.tokens]
         timestamps = [tok.timestamp for tok in ms.tokens]
-        if any(ts != 0 for ts in timestamps):
-            initial_marking[pname] = {
-                "tokens": tokens,
-                "timestamps": timestamps
-            }
-        else:
-            initial_marking[pname] = {
-                "tokens": tokens
-            }
 
-    # Sort color set definitions by their numeric suffix for stable ordering
-    sorted_defs = [name_to_def[n] for n in sorted(name_to_def.keys(), key=lambda x: int(x[2:]))]
+        # Only include timestamps if the place's colorset is timed OR if any token has a non-zero timestamp
+        include_timestamps = place.colorset.timed or any(ts != 0 for ts in timestamps)
 
-    # Evaluation Context
+        marking_data = {"tokens": tokens}
+        if include_timestamps:
+             marking_data["timestamps"] = timestamps
+
+        initial_marking[pname] = marking_data
+
+
+    # Get color set definitions in the correct order (from OrderedDict)
+    # *** REMOVED SORTING LOGIC ***
+    ordered_defs = list(name_to_def.values())
+
+    # Evaluation Context handling (remains the same)
     evaluation_context_val = None
     if context is not None:
-        user_code = context.env.get('__original_user_code__', None)
-        if user_code is not None and user_code.strip():
-            # If user_code is actually a file, store the path
-            if os.path.isfile(user_code):
-                evaluation_context_val = user_code
+        # Assuming user code might be stored directly or referenced via a special key
+        user_code = context.env.get('__original_user_code__', None) # Example key
+        if isinstance(user_code, str) and user_code.strip():
+            # If user_code looks like a file path and exists, store the path
+            if os.path.sep in user_code and os.path.isfile(user_code):
+                 evaluation_context_val = user_code
             else:
-                # Otherwise, write inline code to a .py file if specified
+                # Otherwise, it's inline code. Write to a .py file if path specified.
                 if output_py_path is None:
-                    output_py_path = "user_code_exported.py"
-                with open(output_py_path, "w") as f:
-                    f.write(user_code)
-                evaluation_context_val = output_py_path
+                    # Default filename if none provided
+                    output_py_path = os.path.join(os.path.dirname(output_json_path), "user_code_exported.py")
+                    print(f"Warning: output_py_path not specified for inline code. Writing to {output_py_path}")
+
+                try:
+                    # Ensure directory exists
+                    #os.makedirs(os.path.dirname(output_py_path), exist_ok=True)
+                    with open(output_py_path, "w") as f:
+                        f.write(user_code)
+                    evaluation_context_val = output_py_path
+                except Exception as e:
+                    print(f"Error writing user code to {output_py_path}: {e}")
+                    evaluation_context_val = None # Indicate failure
 
     # Build the final JSON structure
     final_json = {
-        "colorSets": sorted_defs,
+        # Use the correctly ordered list of definitions
+        "colorSets": ordered_defs,
         "places": places_json,
         "transitions": transitions_json,
         "initialMarking": initial_marking,
-        "evaluationContext": evaluation_context_val
+        # Only include evaluationContext if it was successfully determined
+        **({"evaluationContext": evaluation_context_val} if evaluation_context_val else {})
     }
 
     # Write to JSON file
-    with open(output_json_path, "w") as f:
-        json.dump(final_json, f, indent=2)
+    try:
+         # Ensure directory exists
+         #os.makedirs(os.path.dirname(output_json_path), exist_ok=True)
+         with open(output_json_path, "w") as f:
+             json.dump(final_json, f, indent=2)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error writing CPN JSON to {output_json_path}: {e}")
+        return None # Indicate failure
 
     return final_json
 
 
 # -----------------------------------------------------------------------------------
-# Example Usage (for testing the exporter with the new color sets)
+# Example Usage (using the modified exporter)
 # -----------------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Use multiline definition for color sets, now parsed via the new parser in colorsets.py
+    # --- Define ColorSets using the parser ---
+    # Make sure colorsets.py defines the ColorSetParser and ColorSet classes correctly
     cs_parser = ColorSetParser()
-    cs_defs = cs_parser.parse_definitions("""\
+    try:
+        cs_defs = cs_parser.parse_definitions("""\
 colset INT = int timed;
 colset STRING = string;
+colset BASIC_ENUM = { 'A', 'B' };
 colset PAIR = product(INT, STRING) timed;
+colset LIST_ENUM = list BASIC_ENUM;
 """)
-    int_set = cs_defs["INT"]
-    pair_set = cs_defs["PAIR"]
+        # --- Access parsed colorsets ---
+        int_set = cs_defs["INT"]
+        string_set = cs_defs["STRING"] # Needed for PAIR definition, parser handles this
+        pair_set = cs_defs["PAIR"]
+        basic_enum_set = cs_defs["BASIC_ENUM"]
+        list_enum_set = cs_defs["LIST_ENUM"]
 
-    # Create some places and a transition
-    p_int = Place("P_Int", int_set)
-    p_pair = Place("P_Pair", pair_set)
-    t = Transition("T", guard="x > 10", variables=["x"], transition_delay=2)
+        # --- Create CPN elements ---
+        p_int = Place("P_Int", int_set) # Uses INT
+        p_pair = Place("P_Pair", pair_set) # Uses PAIR (depends on INT, STRING)
+        p_list = Place("P_List", list_enum_set) # Uses LIST_ENUM (depends on BASIC_ENUM)
 
-    # Construct the net
-    cpn = CPN()
-    cpn.add_place(p_int)
-    cpn.add_place(p_pair)
-    cpn.add_transition(t)
-    cpn.add_arc(Arc(p_int, t, "x"))
-    cpn.add_arc(Arc(t, p_pair, "(x, 'hello') @+5"))
+        # Create a place using an unnamed, programmatically defined colorset
+        prog_enum_set = EnumeratedColorSet(['X', 'Y'], timed=True) # No 'name' attribute set here
+        p_prog = Place("P_Prog", prog_enum_set)
 
-    # Marking with some tokens
-    marking = Marking()
-    marking.set_tokens("P_Int", [5, 12])
+        # Create a place reusing a base type directly
+        p_str = Place("P_Str", string_set) # Uses STRING
 
-    # Create an evaluation context with some user code
-    user_code = "def double(n): return n*2"
-    context = EvaluationContext(user_code=user_code)
 
-    # Export
-    exported = export_cpn_to_json(
-        cpn, marking, context,
-        output_json_path="cpn_export.json",
-        output_py_path="user_code_exported.py"
-    )
-    print("Exported JSON:")
-    print(json.dumps(exported, indent=2))
+        t1 = Transition("T1", guard="x > 10", variables=["x"], transition_delay=2)
+        t2 = Transition("T2", variables=["l"])
+
+
+        # --- Construct the net ---
+        cpn = CPN()
+        cpn.add_place(p_int)
+        cpn.add_place(p_pair)
+        cpn.add_place(p_list)
+        cpn.add_place(p_prog) # Add place with programmatically defined CS
+        cpn.add_place(p_str)  # Add place reusing STRING
+
+        cpn.add_transition(t1)
+        cpn.add_transition(t2)
+
+        # Arcs for T1
+        cpn.add_arc(Arc(p_int, t1, "x"))
+        # Output includes timestamp delay
+        cpn.add_arc(Arc(t1, p_pair, "(x, 'processed') @+ 5"))
+        # Also output original value to string place (untimed)
+        cpn.add_arc(Arc(t1, p_str, "'original was ' + str(x)"))
+
+        # Arcs for T2
+        cpn.add_arc(Arc(p_list, t2, "l"))
+        # Output to the programmatically defined place
+        cpn.add_arc(Arc(t2, p_prog, "['X'] @+ 1")) # Outputting a list, but place expects 'X' or 'Y'. Should error on simulation, but export is fine.
+
+
+        # --- Initial Marking ---
+        marking = Marking()
+        # Add timed tokens to P_Int
+        marking.set_tokens("P_Int", [5, 12], timestamps=[0, 2]) # Token 12 arrives at time 2
+        # Add untimed tokens to P_List (even though ListColorSet itself wasn't marked timed)
+        marking.set_tokens("P_List", [['A'], ['A', 'B']])
+        # Add timed token to P_Prog
+        marking.set_tokens("P_Prog", ['Y'], timestamps=[10])
+
+
+        # --- Evaluation Context ---
+        user_code = """
+import math
+
+def check_list(items):
+    print(f"Checking list: {items}")
+    return len(items) > 0
+"""
+        # Store the code string itself in the context for potential export
+        context = EvaluationContext(user_code=user_code)
+        context.env['__original_user_code__'] = user_code # Make it explicit
+
+        # --- Export ---
+        output_dir = "cpn_export_test"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        json_file = os.path.join(output_dir, "cpn_export_ordered.json")
+        py_file = os.path.join(output_dir, "user_code_exported.py")
+
+        print(f"Exporting CPN to {json_file}...")
+        exported_data = export_cpn_to_json(
+            cpn, marking, context,
+            output_json_path=json_file,
+            output_py_path=py_file # Explicitly provide path for user code
+        )
+        print(exported_data)
+
+        if exported_data:
+            print("\nExport successful. Resulting JSON structure:")
+            # Print limited part of JSON for brevity
+            print("{")
+            print(f'  "colorSets": {json.dumps(exported_data["colorSets"], indent=4)},')
+            print(f'  "places": {json.dumps(exported_data["places"], indent=4)},')
+            print(f'  "transitions": [...],')
+            print(f'  "initialMarking": {json.dumps(exported_data["initialMarking"], indent=4)},')
+            print(f'  "evaluationContext": {json.dumps(exported_data.get("evaluationContext"))}')
+            print("}")
+            print(f"\nUser code saved to: {py_file}")
+        else:
+            print("\nExport failed.")
+
+    except ImportError as e:
+        print(f"\nError: Could not import necessary CPN or ColorSet modules.")
+        print(f"Details: {e}")
+        print("Please ensure cpnpy.cpn.cpn_imp and cpnpy.cpn.colorsets are accessible.")
+    except ValueError as e:
+        print(f"\nError during ColorSet parsing or CPN setup: {e}")
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        import traceback
+        traceback.print_exc()
+
+# <<END OF EXPORTER MODIFIED>>
