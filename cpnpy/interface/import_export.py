@@ -74,7 +74,16 @@ def import_cpn_ui_xml():
             F.close()
 
             json_dict = cpn_xml_to_json.cpn_xml_to_json("prova.cpn")
+
+            F = open("prova123.json", "w")
+            json.dump(json_dict, F, indent=2)
+            F.close()
+
             json_dict = json.loads(llm_json_fixing.fix_json(json_dict))
+
+            F = open("prova456.json", "w")
+            json.dump(json_dict, F, indent=2)
+            F.close()
 
             color_set_defs = json_dict.get("colorSets", [])
             color_definitions_text = "\n".join(color_set_defs)
