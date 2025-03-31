@@ -17,7 +17,7 @@ import streamlit as st
 # 3) Import your own modules
 from cpnpy.cpn.cpn_imp import CPN, Marking, EvaluationContext
 from cpnpy.cpn.colorsets import ColorSetParser
-from cpnpy.interface.import_export import import_cpn_ui
+from cpnpy.interface.import_export import import_cpn_ui_json, import_cpn_ui_xml
 
 def init_session_state():
     """Initialize session state variables if not present."""
@@ -44,8 +44,12 @@ st.markdown(
 )
 
 # 1) Option A: Import an existing CPN
-with st.expander("Import an Existing CPN", expanded=False):
-    import_cpn_ui()
+with st.expander("Import an Existing CPN (JSON)", expanded=False):
+    import_cpn_ui_json()
+    st.info("After a successful import, switch to **Page 2** to edit or simulate the net.")
+
+with st.expander("Import an Existing CPN (XML, Stub)", expanded=False):
+    import_cpn_ui_xml()
     st.info("After a successful import, switch to **Page 2** to edit or simulate the net.")
 
 # 2) Option B: Create from Scratch (Parse Color Sets)

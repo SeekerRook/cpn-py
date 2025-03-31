@@ -7,7 +7,7 @@ from cpnpy.cpn.exporter import export_cpn_to_json
 from cpnpy.cpn.colorsets import ColorSetParser
 
 
-def import_cpn_ui():
+def import_cpn_ui_json():
     """
     Displays a file uploader for importing a CPN from JSON.
     On success, updates:
@@ -53,6 +53,49 @@ def import_cpn_ui():
 
             st.success("CPN imported successfully!")
         except Exception as e:
+            st.error(f"Failed to import CPN: {e}")
+
+
+def import_cpn_ui_xml():
+    import json
+    from cpnpy.util.conversion import cpn_xml_to_json, llm_json_fixing
+    from cpnpy.cpn import importer
+
+    st.subheader("Import CPN from XML")
+
+    uploaded_file = st.file_uploader("Choose a CPN file", type=["cpn"])
+    if uploaded_file is not None:
+        try:
+            file_content = uploaded_file.read()
+            uploaded_file.close()
+
+            F = open("prova.cpn", "wb")
+            F.write(file_content)
+            F.close()
+
+            json_dict = cpn_xml_to_json.cpn_xml_to_json("prova.cpn")
+            json_dict = json.loads(llm_json_fixing.fix_json(json_dict))
+
+            color_set_defs = json_dict.get("colorSets", [])
+            color_definitions_text = "\n".join(color_set_defs)
+
+            parser = ColorSetParser()
+            if color_definitions_text.strip():
+                parsed_colorsets = parser.parse_definitions(color_definitions_text)
+            else:
+                parsed_colorsets = {}
+
+            cpn, marking, context = importer.import_cpn_from_json(json_dict)
+
+            st.session_state["cpn"] = cpn
+            st.session_state["marking"] = marking
+            st.session_state["context"] = context
+            st.session_state["colorsets"] = parsed_colorsets
+
+            st.success("CPN imported successfully!")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             st.error(f"Failed to import CPN: {e}")
 
 

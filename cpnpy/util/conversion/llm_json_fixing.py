@@ -1,17 +1,20 @@
 import requests
 import json
+import os
 
-api_url = "https://api.deepseek.com/chat/completions"
-model_name = "deepseek-reasoner"
-api_key = open("../../../../api_deepseek.txt", "r").read().strip()
+api_url = "https://api.openai.com/v1/chat/completions"
+model_name = "o3-mini"
+api_key = os.environ["OPENAI_API_KEY"]
 
+try:
+    schema = open("../../../files/validation_schema.json", "r").read()
+except:
+    schema = open("files/validation_schema.json", "r").read()
 
 def fix_json(data):
     json0 = json.dumps(data, indent=2)
 
-    schema = open("../../../files/validation_schema.json", "r").read()
-
-    question = "Can you fix the following JSON according to the JSON schema? In particular, translate Standard ML expressions in Python.\n\nJSON:\n\n" + json0 + "\n\n\nSCHEMA:\n\n" + schema
+    question = "Can you fix the following JSON according to the JSON schema? Please return the result between the tags ```json and ```. In particular, translate Standard ML expressions in Python.\n\nJSON:\n\n" + json0 + "\n\n\nSCHEMA:\n\n" + schema
 
     #question = "What is 2+2?"
 
