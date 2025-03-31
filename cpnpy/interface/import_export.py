@@ -74,7 +74,7 @@ def export_cpn_ui():
     # Let the user specify a filename
     filename = st.text_input("Export JSON filename", value="exported_cpn.json")
 
-    if st.button("Export and Download CPN"):
+    if st.button("Export CPN in JSON"):
         try:
             # exporter returns a dict representing the JSON structure
             exported_json = export_cpn_to_json(
@@ -88,11 +88,49 @@ def export_cpn_ui():
 
             # Provide a download button
             st.download_button(
-                label="Download CPN JSON",
+                label="Download JSON",
                 data=exported_str,
                 file_name=filename,
                 mime="application/json"
             )
-            st.success(f"CPN exported as '{filename}'.")
+            st.success(f"CPN exported as '{filename}'. Please download it.")
         except Exception as e:
+            st.error(f"Error exporting CPN: {e}")
+
+    if st.button("Export CPN in XLM (stub)"):
+        try:
+            # exporter returns a dict representing the JSON structure
+            exported_json = export_cpn_to_json(
+                cpn=cpn,
+                marking=marking,
+                context=context,
+                output_json_path=filename,  # not actually writing to disk except for references
+                output_py_path=None         # or "exported_user_code.py", etc.
+            )
+            exported_str = json.dumps(exported_json, indent=2)
+
+            from tempfile import NamedTemporaryFile
+            F = NamedTemporaryFile(suffix=".json")
+            F.close()
+            F = open(F.name, "w")
+            F.write(exported_str)
+            F.close()
+
+            from cpnpy.util.conversion import json_to_cpn_xml
+            cpn_xml = json_to_cpn_xml.apply(F.name)
+
+            filename = filename.replace(".json", ".xml")
+
+            # Provide a download button
+            st.download_button(
+                label="Download XML",
+                data=cpn_xml,
+                file_name=filename,
+                mime="application/xml"
+            )
+            st.success(f"CPN exported as '{filename}'. Please download it.")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+
             st.error(f"Error exporting CPN: {e}")
