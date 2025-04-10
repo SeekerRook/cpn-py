@@ -23,7 +23,7 @@ def load_requirements(filename):
         ]
 
 
-install_requires = load_requirements("requirements.txt")
+install_requires = ["pm4py", "jsonschema", "simpy"]
 
 setup(
     name=meta["__title__"],
