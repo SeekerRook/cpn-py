@@ -175,7 +175,7 @@ def apply(log: EventLog, parameters: Optional[Dict[str, Any]] = None) -> Tuple[C
     code = ""
     if enable_timing_discovery:
         code = """
-    from scipy.stats import norm, uniform, expon, lognorm, gamma
+from scipy.stats import norm, uniform, expon, lognorm, gamma
         """
     context = EvaluationContext(user_code=code)
 
