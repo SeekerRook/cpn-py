@@ -207,65 +207,68 @@ with tabs[3]:
 # ------------------------------------------------------------------------------
 st.subheader("Current CPN Structure & Marking")
 st.markdown(f"**Global Clock**: {marking.global_clock}")
-
-g = draw_cpn(cpn, marking)
-st.graphviz_chart(g)
-
-with st.expander("Marking Details", expanded=False):
-    st.text(repr(marking))
-
-# Simulation
-st.subheader("Simulation Controls")
-enabled_list = get_enabled_transitions(cpn, marking, context)
-if enabled_list:
-    st.write("**Enabled transitions** (with any valid binding):", enabled_list)
-    chosen_transition = st.selectbox("Choose a transition to fire", enabled_list, key="fire_transition_select")
-
-    # --- Manual binding support ---
-    use_manual_binding = st.checkbox("Use a Manual Binding?", value=False)
-    binding_str = ""
-    if use_manual_binding:
-        # Let user specify "x=42, y='red'" etc.
-        binding_str = st.text_input(
-            label="Binding (e.g. x=42, y='red')",
-            placeholder="x=42, y='red'"
-        )
-
-    if st.button("Fire Transition"):
-        binding = None
-        if use_manual_binding and binding_str.strip():
-            try:
-                binding = parse_binding_to_dict(binding_str)
-            except Exception as e:
-                st.warning(f"Could not parse binding: {e}")
-                binding = None
-
-        if binding:
-            # Fire transition with user-specified binding
-            t_obj = cpn.get_transition_by_name(chosen_transition)
-            if not t_obj:
-                st.error("Transition not found (unexpected).")
-            else:
-                # Check if enabled with that binding
-                if cpn.is_enabled(t_obj, marking, context, binding=binding):
-                    cpn.fire_transition(t_obj, marking, context, binding=binding)
-                    st.success(f"Fired transition '{chosen_transition}' with binding {binding}.")
-                else:
-                    st.warning(f"Transition '{chosen_transition}' not enabled with binding {binding}.")
-        else:
-            # Fallback: no manual binding
-            from cpnpy.interface.simulation import step_transition
-            step_transition(cpn, chosen_transition, marking, context)
-else:
-    st.write("No transitions are enabled at the moment.")
-
 colA, colB = st.columns(2)
 
 with colA:
+    g = draw_cpn(cpn, marking)
+    st.graphviz_chart(g)
+with colB:
+
+    with st.expander("Marking Details", expanded=False):
+        st.text(repr(marking))
+
+    # Simulation
+    # st.subheader("Simulation Controls")
+    enabled_list = get_enabled_transitions(cpn, marking, context)
+    if enabled_list:
+        st.write("**Enabled transitions** (with any valid binding):", enabled_list)
+        chosen_transition = st.selectbox("Choose a transition to fire", enabled_list, key="fire_transition_select")
+
+        # --- Manual binding support ---
+        use_manual_binding = st.checkbox("Use a Manual Binding?", value=False)
+        binding_str = ""
+        if use_manual_binding:
+            # Let user specify "x=42, y='red'" etc.
+            binding_str = st.text_input(
+                label="Binding (e.g. x=42, y='red')",
+                placeholder="x=42, y='red'"
+            )
+
+        if st.button("Fire Transition"):
+            binding = None
+            if use_manual_binding and binding_str.strip():
+                try:
+                    binding = parse_binding_to_dict(binding_str)
+                except Exception as e:
+                    st.warning(f"Could not parse binding: {e}")
+                    binding = None
+
+            if binding:
+                # Fire transition with user-specified binding
+                t_obj = cpn.get_transition_by_name(chosen_transition)
+                if not t_obj:
+                    st.error("Transition not found (unexpected).")
+                else:
+                    # Check if enabled with that binding
+                    if cpn.is_enabled(t_obj, marking, context, binding=binding):
+                        cpn.fire_transition(t_obj, marking, context, binding=binding)
+                        st.success(f"Fired transition '{chosen_transition}' with binding {binding}.")
+                    else:
+                        st.warning(f"Transition '{chosen_transition}' not enabled with binding {binding}.")
+            else:
+                # Fallback: no manual binding
+                from cpnpy.interface.simulation import step_transition
+                step_transition(cpn, chosen_transition, marking, context)
+    else:
+        st.write("No transitions are enabled at the moment.")
+
+# colA, colB = st.columns(2)
+
+# with colA:
     if st.button("Advance Global Clock"):
         advance_clock(cpn, marking)
 
-with colB:
+# with colB:
     if st.button("Update Visualized Information"):
         st.info("Visualization and Marking updated!")
 

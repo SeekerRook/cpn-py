@@ -11,7 +11,8 @@ def cpn_to_graphviz(cpn: CPN, marking: Marking) -> graphviz.Digraph:
     for place in cpn.places:
         place_id = f"place_{place.name}"
         num_tokens = len(marking.get_multiset(place.name).tokens)
-        label = f"{place.name}\\n{repr(place.colorset)}\\nTokens: {num_tokens}"
+        label = f"{place.name}\\n{place.colorset.name}\\nTokens: {num_tokens}"
+        # label = f"{place.name}\\n{repr(place.colorset)}\\nTokens: {num_tokens}"
         dot.node(place_id, label=label, shape="ellipse", style="filled", color="#D3E4CD")
 
     # 2. Add Transition nodes
