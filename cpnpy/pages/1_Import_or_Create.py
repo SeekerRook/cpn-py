@@ -43,14 +43,6 @@ st.markdown(
     """
 )
 
-# 1) Option A: Import an existing CPN
-with st.expander("Import an Existing CPN (JSON)", expanded=False):
-    import_cpn_ui_json()
-    st.info("After a successful import, switch to **Page 2** to edit or simulate the net.")
-
-with st.expander("Import an Existing CPN (XML, Stub)", expanded=False):
-    import_cpn_ui_xml()
-    st.info("After a successful import, switch to **Page 2** to edit or simulate the net.")
 
 # 2) Option B: Create from Scratch (Parse Color Sets)
 with st.expander("Create from Scratch: Define Color Sets", expanded=False):
@@ -71,6 +63,14 @@ with st.expander("Create from Scratch: Define Color Sets", expanded=False):
                 st.write(f"- **{name}**: {repr(cs)}")
         except Exception as e:
             st.error(f"Error parsing color sets: {e}")
+# 1) Option A: Import an existing CPN
+with st.expander("Import an Existing CPN (JSON)", expanded=False):
+    import_cpn_ui_json()
+    st.info("After a successful import, switch to **Page 2** to edit or simulate the net.")
+
+with st.expander("Import an Existing CPN (XML, Stub)", expanded=False):
+    import_cpn_ui_xml()
+    st.info("After a successful import, switch to **Page 2** to edit or simulate the net.")
 
 st.markdown(
     """

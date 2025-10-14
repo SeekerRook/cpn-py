@@ -1,11 +1,13 @@
 import requests
 import json
 import os
-
 api_url = "https://api.openai.com/v1/chat/completions"
 model_name = "o3-mini"
-api_key = os.environ["OPENAI_API_KEY"]
-
+try:
+    api_key = os.environ["OPENAI_API_KEY"]
+except:
+    api_key = ""
+    print("NO OPENAPI KEY FOUND IN ENV")
 try:
     schema = open("../../../files/validation_schema.json", "r").read()
 except:
