@@ -207,11 +207,20 @@ with tabs[3]:
 # ------------------------------------------------------------------------------
 st.subheader("Current CPN Structure & Marking")
 st.markdown(f"**Global Clock**: {marking.global_clock}")
-colA, colB = st.columns(2)
+colA, colB ,colC= st.columns(3)
 
 with colA:
     g = draw_cpn(cpn, marking)
     st.graphviz_chart(g)
+    with st.expander("Marking Details", expanded=False):
+            # st.text(repr(marking))
+        for place,tokens in marking._marking.items():
+            st.text(place)
+            r = ""
+            for token in tokens.tokens:
+                r+=f"{token}"[:-1].replace("Token(",'').replace(", t=","@")+'\n'
+            st.text(r)
+
 with colB:
 
     with st.expander("Marking Details", expanded=False):
@@ -221,27 +230,27 @@ with colB:
     # st.subheader("Simulation Controls")
     enabled_list = get_enabled_transitions(cpn, marking, context)
     if enabled_list:
-        st.write("**Enabled transitions** (with any valid binding):", enabled_list)
+        # st.write("**Enabled transitions** (with any valid binding):", enabled_list)
         chosen_transition = st.selectbox("Choose a transition to fire", enabled_list, key="fire_transition_select")
 
         # --- Manual binding support ---
-        use_manual_binding = st.checkbox("Use a Manual Binding?", value=False)
-        binding_str = ""
-        if use_manual_binding:
-            # Let user specify "x=42, y='red'" etc.
-            binding_str = st.text_input(
-                label="Binding (e.g. x=42, y='red')",
-                placeholder="x=42, y='red'"
-            )
+        # use_manual_binding = st.checkbox("Use a Manual Binding?", value=False)
+        # binding_str = ""
+        # if use_manual_binding:
+        #     # Let user specify "x=42, y='red'" etc.
+        #     binding_str = st.text_input(
+        #         label="Binding (e.g. x=42, y='red')",
+        #         placeholder="x=42, y='red'"
+        #     )
 
         if st.button("Fire Transition"):
             binding = None
-            if use_manual_binding and binding_str.strip():
-                try:
-                    binding = parse_binding_to_dict(binding_str)
-                except Exception as e:
-                    st.warning(f"Could not parse binding: {e}")
-                    binding = None
+            # if use_manual_binding and binding_str.strip():
+            #     try:
+            #         binding = parse_binding_to_dict(binding_str)
+            #     except Exception as e:
+            #         st.warning(f"Could not parse binding: {e}")
+            #         binding = None
 
             if binding:
                 # Fire transition with user-specified binding
@@ -268,11 +277,14 @@ with colB:
     if st.button("Advance Global Clock"):
         advance_clock(cpn, marking)
 
-# with colB:
+with colC:
     if st.button("Update Visualized Information"):
         st.info("Visualization and Marking updated!")
 
 # Export
+
+
+
 st.subheader("Export CPN")
 export_cpn_ui()
 
