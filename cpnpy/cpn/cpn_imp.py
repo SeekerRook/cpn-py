@@ -14,8 +14,8 @@ class Token:
 
     def __repr__(self):
         if self.timestamp != 0:
-            return f"Token({self.value}, t={self.timestamp})"
-        return f"Token({self.value})"
+            return f"{self.value} @{self.timestamp}"
+        return f"{self.value}"
 
     def __copy__(self):
         # Shallow copy: values assumed to be immutable or just referenced

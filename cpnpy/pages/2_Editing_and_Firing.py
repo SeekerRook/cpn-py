@@ -218,7 +218,7 @@ with colA:
             st.text(place)
             r = ""
             for token in tokens.tokens:
-                r+=f"{token}"[:-1].replace("Token(",'').replace(", t=","@")+'\n'
+                r+=f"{token}\n"
             st.text(r)
 
 with colB:
