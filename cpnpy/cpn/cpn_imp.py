@@ -175,8 +175,11 @@ class EvaluationContext:
             val = eval(expr_part, self.env, binding)
             delay = eval(delay_part, self.env, binding)
         else:
-            val = eval(arc_expr, self.env, binding)
-
+            try:
+                val = eval(arc_expr, self.env, binding)
+            except Exception as e:
+                print(f"error in {arc_expr} binding: {binding}")
+                raise(e)
         if isinstance(val, list):
             return val, delay
         return [val], delay
