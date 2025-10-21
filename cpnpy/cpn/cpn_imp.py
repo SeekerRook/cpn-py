@@ -161,8 +161,11 @@ class EvaluationContext:
     def evaluate_guard(self, guard_expr: Optional[str], binding: Dict[str, Any]) -> bool:
         if guard_expr is None:
             return True
-        return bool(eval(guard_expr, self.env, binding))
-
+        try:
+            return bool(eval(guard_expr, self.env, binding))
+        except Exception as e:
+            print(f"error in {guard_expr} binding: {binding}")
+            raise(e)
     def evaluate_arc(self, arc_expr: str, binding: Dict[str, Any]) -> (List[Any], int):
         delay = 0
         if "@+" in arc_expr:
