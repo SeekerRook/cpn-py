@@ -1,7 +1,7 @@
 import graphviz
 import html
 import tempfile
-import os
+import os, shutil
 from cpnpy.cpn.cpn_imp import *
 
 
@@ -153,7 +153,10 @@ class CPNGraphViz:
         out_path = self.graph.render(filename=filename, cleanup=True)
         final_path = os.path.join(os.getcwd(), os.path.basename(out_path))
         if os.path.abspath(final_path) != os.path.abspath(out_path):
-            os.rename(out_path, final_path)
+            try: os.rename(out_path, final_path)
+            except:
+                shutil.copy2(out_path, final_path)
+                os.unlink(out_path)
         return final_path
 
 
