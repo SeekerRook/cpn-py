@@ -353,9 +353,6 @@ class CPN:
 
     def _check_enabled_with_binding(self, t: Transition, marking: Marking, context: EvaluationContext,
                                     binding: Dict[str, Any]) -> bool:
-        if t.guard_expr:
-            if not context.evaluate_guard(t.guard_expr, binding):
-                return False
         # Check input arcs and timestamps
         for arc in self.get_input_arcs(t):
             values, _ = context.evaluate_arc(arc.expression, binding)
@@ -366,6 +363,9 @@ class CPN:
                                 tok.value == val and tok.timestamp <= marking.global_clock]
                 if len(ready_tokens) < values.count(val):
                     return False
+        if t.guard_expr:
+            if not context.evaluate_guard(t.guard_expr, binding):
+                return False    
         return True
 
     def _find_binding(self, t: Transition, marking: Marking, context: EvaluationContext) -> Optional[Dict[str, Any]]:
