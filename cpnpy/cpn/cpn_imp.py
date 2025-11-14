@@ -168,6 +168,8 @@ class EvaluationContext:
             raise(e)
     def evaluate_arc(self, arc_expr: str, binding: Dict[str, Any]) -> (List[Any], int):
         delay = 0
+        if arc_expr=="INHIBITOR":
+            return None , None
         if "@+" in arc_expr:
             parts = arc_expr.split('@+')
             expr_part = parts[0].strip()
@@ -343,6 +345,8 @@ class CPN:
 
         # Remove tokens
         for arc in self.get_input_arcs(t):
+            if arc.expression=="INHIBITOR":
+                continue
             values, _ = context.evaluate_arc(arc.expression, binding)
             marking.remove_tokens(arc.source.name, values)
 
@@ -361,14 +365,21 @@ class CPN:
                                     binding: Dict[str, Any]) -> bool:
         # Check input arcs and timestamps
         for arc in self.get_input_arcs(t):
-            values, _ = context.evaluate_arc(arc.expression, binding)
             place_marking = marking.get_multiset(arc.source.name)
-            # Check if we have enough ready tokens (timestamp <= global_clock)
-            for val in values:
-                ready_tokens = [tok for tok in place_marking.tokens if
-                                tok.value == val and tok.timestamp <= marking.global_clock]
-                if len(ready_tokens) < values.count(val):
+            
+            if arc.expression == "INHIBITOR":
+                if len(place_marking.tokens) != 0:
                     return False
+                
+            else:
+                values, _ = context.evaluate_arc(arc.expression, binding)
+                # Check if we have enough ready tokens (timestamp <= global_clock)
+
+                for val in values:
+                    ready_tokens = [tok for tok in place_marking.tokens if
+                                    tok.value == val and tok.timestamp <= marking.global_clock]
+                    if len(ready_tokens) < values.count(val):
+                        return False
         if t.guard_expr:
             if not context.evaluate_guard(t.guard_expr, binding):
                 return False    
