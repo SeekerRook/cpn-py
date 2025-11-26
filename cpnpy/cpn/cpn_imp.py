@@ -368,7 +368,7 @@ class CPN:
             place_marking = marking.get_multiset(arc.source.name)
             
             if arc.expression == "INHIBITOR":
-                if len(place_marking.tokens) != 0:
+                if len([i for i in place_marking.tokens if i.timestamp <= marking.global_clock]) != 0:
                     return False
                 
             else:
